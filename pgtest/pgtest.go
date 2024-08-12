@@ -22,17 +22,17 @@ const testDbContainerName = "ssproc-testdb-ct"
 
 var logger = plugs.DefaultLogger("DbSuite")
 
-var client = &http.Client{
-	Timeout: 15 * time.Minute,
-}
-
 func Close() {
-	client.CloseIdleConnections()
+
 }
 
 // GetDbSuiteForTest will use file-locking to force only single test usage of each of our database, it will also
 // create Suite.DebugCtx with longer transaction timeout so we can debug easily in tests.
 func GetDbSuiteForTest(testName string) *Suite {
+	client := &http.Client{
+		Timeout: 15 * time.Minute,
+	}
+
 	resp, err := client.Get("http://localhost:9191/lock")
 	if err != nil {
 		panic(err)
@@ -48,10 +48,11 @@ func GetDbSuiteForTest(testName string) *Suite {
 		Logger:     plugs.DefaultLogger(testName + "@" + connStr),
 		DebugCtx:   pg.TimeoutOverrideForTesting(context.Background(), 30*time.Minute),
 		ConnString: connStr,
+		client:     client,
 	}
 }
 
-func unlockViaDbLocker(connStr string) {
+func unlockViaDbLocker(client *http.Client, connStr string) {
 	body := bytes.NewBuffer([]byte(connStr))
 	resp, err := client.Post("http://localhost:9191/unlock", "text/plain", body)
 	if err != nil {
@@ -69,6 +70,7 @@ type Suite struct {
 	DebugCtx   context.Context
 	ConnString string
 	testDbKey  string
+	client     *http.Client
 }
 
 func (s *Suite) Setup(t *testing.T) {
@@ -179,5 +181,6 @@ func (s *Suite) executeQuery(query string, timeout time.Duration) {
 }
 
 func (s *Suite) TearDown(t *testing.T) {
-	unlockViaDbLocker(s.ConnString)
+	unlockViaDbLocker(s.client, s.ConnString)
+	s.client.CloseIdleConnections()
 }

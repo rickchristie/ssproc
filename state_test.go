@@ -17,7 +17,7 @@ const (
 	// TestLeak should be set to true and run manually each time we modify ssproc, this makes sure our modifications
 	// doesn't introduce goroutine leaks. This is important, it really helps us catch leaks. Previously there was
 	// a bug where when there's an error, context/connection was not cancelled, this helps us catch it.
-	TestLeak = true
+	TestLeak = false
 )
 
 type State struct {
