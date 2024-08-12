@@ -3,11 +3,10 @@ package ssproc
 import (
 	"context"
 	"errors"
+	"github.com/rickchristie/ssproc/pgtest"
+	"github.com/rickchristie/ssproc/util"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/goleak"
-	"rukita.co/main/be/accessor/db/pg/pgtest"
-	"rukita.co/main/be/lib/test"
-	"rukita.co/main/be/lib/tr"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -22,7 +21,7 @@ func TestExecute_PanicOnExecute(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
@@ -45,8 +44,8 @@ func TestExecute_PanicOnExecute(t *testing.T) {
 
 	// Try register execute, error is returned instead of panicking.
 	jobData := process.newJobData()
-	trace := tr.Trace{TraceId: test.UUIDString()}
-	latest, err := executorA.RegisterExecuteWait(s.h.Ctx, &trace, jobData)
+	traceId := util.UUIDString()
+	latest, err := executorA.RegisterExecuteWait(s.h.Ctx, traceId, jobData)
 	assert.NotNil(t, err)
 	assertJobDataIsLatest(t, s.h, proc, latest)
 	assert.Equal(
@@ -57,21 +56,21 @@ func TestExecute_PanicOnExecute(t *testing.T) {
 
 	// Assert heartbeat stops (i.e. it doesn't change even when we wait 1 second, heartbeat is 100ms).
 	job, _ := s.h.GetJob(t, jobData.JobId)
-	err = test.Await(1*time.Second, func() bool {
+	err = util.Await(1*time.Second, func() bool {
 		found, _ := s.h.GetJob(t, jobData.JobId)
 		return job.GoroutineHeartBeatTs.UnixMicro() != found.GoroutineHeartBeatTs.UnixMicro()
 	})
 	assert.NotNil(t, err)
 
 	// Job is taken over, but it's not updated to error.
-	err = test.Await(4*time.Second, func() bool {
+	err = util.Await(4*time.Second, func() bool {
 		foundJob, _ := s.h.GetJob(t, jobData.JobId)
 		return foundJob.GoroutineId != job.GoroutineId
 	})
 	assert.Nil(t, err)
 
 	// Job will not be marked as done or error.
-	err = test.Await(2*time.Second, func() bool {
+	err = util.Await(2*time.Second, func() bool {
 		foundJob, _ := s.h.GetJob(t, jobData.JobId)
 		return foundJob.Status != JSReady
 	})
@@ -91,7 +90,7 @@ func TestExecute_HeartbeatError(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
@@ -140,7 +139,8 @@ func TestExecute_HeartbeatError(t *testing.T) {
 		}
 		return SRSuccess
 	}
-	client := NewClient(&storage, proc)
+	utilTime := util.NewGlobalTime(time.Local)
+	client := NewClient(&storage, proc, utilTime)
 
 	// Start executor.
 	leaseExpireDuration := 1 * time.Second
@@ -160,7 +160,7 @@ func TestExecute_HeartbeatError(t *testing.T) {
 	assert.Nil(t, err)
 
 	// Wait until job is taken over.
-	err = test.Await(5*time.Second, func() bool {
+	err = util.Await(5*time.Second, func() bool {
 		job, _ := s.h.GetJob(t, jobData.JobId)
 		return job.GoroutineId != ""
 	})
@@ -175,7 +175,7 @@ func TestExecute_HeartbeatError(t *testing.T) {
 	expectedTime := time.Now()
 	for i := 0; i < 10; i++ {
 		expectedTime = expectedTime.Add(100 * time.Millisecond)
-		err = test.Await(1*time.Second, func() bool {
+		err = util.Await(1*time.Second, func() bool {
 			found, _ := s.h.GetJob(t, jobData.JobId)
 			assert.Equal(t, goroutineId, found.GoroutineId)
 
@@ -211,7 +211,7 @@ func TestExecute_HeartbeatPanic(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
@@ -260,7 +260,8 @@ func TestExecute_HeartbeatPanic(t *testing.T) {
 		}
 		return SRSuccess
 	}
-	client := NewClient(&storage, proc)
+	utilTime := util.NewGlobalTime(time.Local)
+	client := NewClient(&storage, proc, utilTime)
 
 	// Start executor.
 	leaseExpireDuration := 1 * time.Second
@@ -280,7 +281,7 @@ func TestExecute_HeartbeatPanic(t *testing.T) {
 	assert.Nil(t, err)
 
 	// Wait until job is taken over.
-	err = test.Await(5*time.Second, func() bool {
+	err = util.Await(5*time.Second, func() bool {
 		job, _ := s.h.GetJob(t, jobData.JobId)
 		return job.GoroutineId != ""
 	})
@@ -295,7 +296,7 @@ func TestExecute_HeartbeatPanic(t *testing.T) {
 	expectedTime := time.Now()
 	for i := 0; i < 10; i++ {
 		expectedTime = expectedTime.Add(100 * time.Millisecond)
-		err = test.Await(1*time.Second, func() bool {
+		err = util.Await(1*time.Second, func() bool {
 			found, _ := s.h.GetJob(t, jobData.JobId)
 			assert.Equal(t, goroutineId, found.GoroutineId)
 
@@ -331,7 +332,7 @@ func TestExecute_HeartbeatFailureContinued(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
@@ -379,7 +380,8 @@ func TestExecute_HeartbeatFailureContinued(t *testing.T) {
 		}
 		return SRSuccess
 	}
-	client := NewClient(&storage, proc)
+	utilTime := util.NewGlobalTime(time.Local)
+	client := NewClient(&storage, proc, utilTime)
 
 	// Start executor.
 	leaseExpireDuration := 1 * time.Second
@@ -399,7 +401,7 @@ func TestExecute_HeartbeatFailureContinued(t *testing.T) {
 	assert.Nil(t, err)
 
 	// Wait until job is taken over.
-	err = test.Await(5*time.Second, func() bool {
+	err = util.Await(5*time.Second, func() bool {
 		job, _ := s.h.GetJob(t, jobData.JobId)
 		return job.GoroutineId != ""
 	})
@@ -414,7 +416,7 @@ func TestExecute_HeartbeatFailureContinued(t *testing.T) {
 	expectedTime := time.Now()
 	for i := 0; i < 10; i++ {
 		expectedTime = expectedTime.Add(100 * time.Millisecond)
-		err = test.Await(1*time.Second, func() bool {
+		err = util.Await(1*time.Second, func() bool {
 			found, _ := s.h.GetJob(t, jobData.JobId)
 			assert.Equal(t, goroutineId, found.GoroutineId)
 

@@ -6,14 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/rickchristie/ssproc/job"
+	"github.com/rickchristie/ssproc/plugs"
+	"github.com/rickchristie/ssproc/util"
 	"math"
 	"math/big"
 	"math/rand"
-	"rukita.co/main/be/data"
-	"rukita.co/main/be/lib/job"
-	"rukita.co/main/be/lib/mend"
-	"rukita.co/main/be/lib/tr"
-	"rukita.co/main/be/lib/util"
 	"runtime"
 	"sort"
 	"time"
@@ -34,7 +32,7 @@ type Executor[Data JobData] struct {
 	name        string
 	serviceName string
 	processId   string
-	logger      mend.Logger
+	logger      plugs.Logger
 	automator   job.Automator
 	storage     Storage
 	namedPool   *job.NamedWorkerPool
@@ -100,6 +98,8 @@ func NewExecutor[Data JobData](
 	process Process[Data],
 	storage Storage,
 	config ExecutorConfig,
+	logger plugs.Logger,
+	utilTime util.Time,
 ) (
 	*Executor[Data],
 	error,
@@ -120,7 +120,7 @@ func NewExecutor[Data JobData](
 		config.LeaseExpireDuration = 1 * time.Minute
 	}
 	if config.LeaseExpireDuration <= config.HeartbeatInterval {
-		return nil, mend.Err("LeaseExpireDuration must be more than HeartBeatInterval", true)
+		return nil, util.Err("LeaseExpireDuration must be more than HeartBeatInterval", true)
 	}
 	if config.SweepInterval == 0 {
 		config.SweepInterval = 50 * time.Second
@@ -140,12 +140,10 @@ func NewExecutor[Data JobData](
 
 	processId := process.Id()
 	if processId == "" {
-		return nil, mend.Err("given process has empty process ID", true)
+		return nil, util.Err("given process has empty process ID", true)
 	}
 
 	name := fmt.Sprintf("%v-%v", config.ExecutorName, process.Id())
-	logger := mend.NewZerologLogger(name)
-
 	ctx, cancelCtx := context.WithCancel(ctx)
 	return &Executor[Data]{
 		serviceName: name,
@@ -162,17 +160,18 @@ func NewExecutor[Data JobData](
 			fmt.Sprintf("ExecutorPool:%v", process.Id()),
 			config.MaxWorkers,
 			config.MinWorkers,
+			logger,
 		),
 		process:   process,
 		ctx:       ctx,
 		cancelCtx: cancelCtx,
-		timeUtil:  util.NewGlobalTime(data.DefaultTimeZone()),
+		timeUtil:  utilTime,
 		config:    config,
 	}, nil
 }
 
 func (s *Executor[Data]) Start() {
-	s.logger.InfoNoTrace().Msg(fmt.Sprintf("%v: Start Sweeping", s.serviceName))
+	s.logger.Info("", fmt.Sprintf("%v: Start Sweeping", s.serviceName), nil)
 	s.automator.StartInterval(s.sweepJobs, s.config.SweepInterval)
 }
 
@@ -182,7 +181,7 @@ func (s *Executor[Data]) Stop() {
 	s.namedPool.StopAndWait()
 }
 
-func (s *Executor[Data]) RegisterExecuteWait(ctx context.Context, trace *tr.Trace, jobData Data) (Data, error) {
+func (s *Executor[Data]) RegisterExecuteWait(ctx context.Context, traceId string, jobData Data) (Data, error) {
 	jobId := jobData.GetJobId()
 	serialized, err := s.process.Serialize(jobData)
 	if err != nil {
@@ -193,7 +192,7 @@ func (s *Executor[Data]) RegisterExecuteWait(ctx context.Context, trace *tr.Trac
 	// This prevents other Executor from leasing this new JobData, and allows the caller to wait for the execution.
 	// If this execution is interrupted, another Executor will pick it up and continue the execution.
 	now := s.timeUtil.Now()
-	goroutineId := fmt.Sprintf("%v-%v", s.name, trace.TraceId)
+	goroutineId := fmt.Sprintf("%v-%v", s.name, traceId)
 	err = s.storage.RegisterJob(ctx, &Job{
 		JobId:                jobId,
 		JobData:              serialized,
@@ -210,7 +209,7 @@ func (s *Executor[Data]) RegisterExecuteWait(ctx context.Context, trace *tr.Trac
 		return jobData, err
 	}
 
-	err = s.execute(ctx, trace, goroutineId, jobId)
+	err = s.execute(ctx, traceId, goroutineId, jobId)
 
 	// Try getting latest job data.
 	latestJob, getErr := s.storage.GetJob(ctx, jobData.GetJobId())
@@ -219,7 +218,7 @@ func (s *Executor[Data]) RegisterExecuteWait(ctx context.Context, trace *tr.Trac
 			"%v: Error getting job after RegisterExecuteWait for job: %v",
 			s.serviceName, jobId,
 		)
-		s.logger.ErrorErr(trace, getErr).Msg(msg)
+		s.logger.Error(traceId, msg, map[string]any{"err": getErr})
 
 		// Return the original error.
 		return jobData, err
@@ -231,7 +230,7 @@ func (s *Executor[Data]) RegisterExecuteWait(ctx context.Context, trace *tr.Trac
 			"%v: Error getting job data after RegisterExecuteWait for job: %v",
 			s.serviceName, jobId,
 		)
-		s.logger.ErrorErr(trace, getErr).Msg(msg)
+		s.logger.Error(traceId, msg, map[string]any{"err": getErr})
 
 		// Return the original error.
 		return jobData, err
@@ -248,7 +247,8 @@ func (s *Executor[Data]) sweepJobs() {
 	// Query 3 times the amount of MaxJobsPerSweep, we want to randomly select from a big pool.
 	jobIds, err := s.storage.GetOpenJobCandidates(s.ctx, s.processId, s.config.MaxJobsPerSweep)
 	if err != nil {
-		s.logger.ErrorNoTrace().Error(err).Msg(fmt.Sprintf("%v: Error getting job candidates!", s.serviceName))
+		msg := fmt.Sprintf("%v: Error getting job candidates!", s.serviceName)
+		s.logger.Error("", msg, map[string]any{"err": err})
 		return
 	}
 
@@ -263,8 +263,8 @@ func (s *Executor[Data]) sweepJobs() {
 	max := big.NewInt(math.MaxInt)
 	seed, err := cRand.Int(cRand.Reader, max)
 	if err != nil {
-		s.logger.ErrorNoTrace().Error(err).Msg(fmt.Sprintf("%v: Error generating random seed!", s.serviceName))
-
+		msg := fmt.Sprintf("%v: Error generating random seed!", s.serviceName)
+		s.logger.Error("", msg, map[string]any{"err": err})
 		return
 	}
 	random := rand.New(rand.NewSource(seed.Int64()))
@@ -283,7 +283,8 @@ func (s *Executor[Data]) sweepJobs() {
 		}
 	}
 
-	s.logger.InfoNoTrace().Msg(fmt.Sprintf("%v: Submitted %v jobs to worker pool", s.serviceName, jobsAdded))
+	msg := fmt.Sprintf("%v: Submitted %v jobs to worker pool", s.serviceName, jobsAdded)
+	s.logger.Info("", msg, nil)
 }
 
 func (s *Executor[Data]) createTask(jobId string) func() {
@@ -291,16 +292,11 @@ func (s *Executor[Data]) createTask(jobId string) func() {
 		// Generate new trace ID, so we can track this JobData's execution.
 		traceId := uuid.New().String()
 		goroutineId := fmt.Sprintf("%v-%v", s.name, traceId)
-		trace := &tr.Trace{
-			TraceId: traceId,
-			Start:   s.timeUtil.Now(),
-			Request: jobId,
-		}
-		err := s.execute(s.ctx, trace, goroutineId, jobId)
+		err := s.execute(s.ctx, traceId, goroutineId, jobId)
 		if err != nil {
 			// JobData will be retried by another Executor.
-			s.logger.ErrorErr(trace, err).
-				Msg(fmt.Sprintf("%v: Error in job executor when executing %v", s.serviceName, jobId))
+			msg := fmt.Sprintf("%v: Error in job executor when executing %v", s.serviceName, jobId)
+			s.logger.Error(traceId, msg, map[string]any{"err": err})
 		}
 	}
 }
@@ -318,7 +314,7 @@ func (s *Executor[Data]) createTask(jobId string) func() {
 // todo pr: add execute test call for more in-depth test of each test execution.
 func (s *Executor[Data]) execute(
 	parentCtx context.Context,
-	trace *tr.Trace,
+	traceId string,
 	goroutineId string,
 	jobId string,
 ) (err error) {
@@ -326,8 +322,8 @@ func (s *Executor[Data]) execute(
 		// Set error so caller (if any), knows there's an error.
 		if pErr := recover(); pErr != nil {
 			msg := fmt.Sprintf("%v: panic on ssproc execute lib: %v, jobId: %v", s.serviceName, pErr, jobId)
-			err = mend.Err(msg, true)
-			s.logger.ErrorErr(trace, err).Msg(msg)
+			err = util.Err(msg, true)
+			s.logger.Error(traceId, msg, map[string]any{"err": err})
 		}
 	}()
 
@@ -365,7 +361,7 @@ func (s *Executor[Data]) execute(
 			"process id mismatch, did process id change in-runtime? job: %v, executor: %v, process: %v",
 			curJob.ProcessId, s.processId, s.process.Id(),
 		)
-		return mend.Err(msg, true)
+		return util.Err(msg, true)
 	}
 
 	jobData, err := s.process.Deserialize(curJob.JobData)
@@ -381,11 +377,11 @@ func (s *Executor[Data]) execute(
 			return err
 		}
 
-		return mend.Wrap(MarkedAsError, true)
+		return util.WrapErr(MarkedAsError, true)
 	}
 
 	// Run another goroutine to regularly send heartbeat to keep the lease open.
-	go s.pingHeartbeat(ctx, cancel, trace, goroutineId, jobId)
+	go s.pingHeartbeat(ctx, cancel, traceId, goroutineId, jobId)
 
 	// Since we're already starting the execution process, we'll increase the execution count. If this is the first
 	// execution, this will increase execution count to 1 before the first execution. Incrementing first makes sure
@@ -413,7 +409,7 @@ func (s *Executor[Data]) execute(
 		select {
 		case <-ctx.Done():
 			// Context cancelled due to timeout or heartbeat failure.
-			return mend.Wrap(ContextCanceled, true)
+			return util.WrapErr(ContextCanceled, true)
 		default:
 			// No signal to stop, continue processing.
 		}
@@ -429,7 +425,7 @@ func (s *Executor[Data]) execute(
 		var res *execResult
 		select {
 		case <-ctx.Done():
-			return mend.Wrap(ContextCanceledOngoing, true)
+			return util.WrapErr(ContextCanceledOngoing, true)
 		case res = <-cRet:
 			// After this point, all executeSubprocess changes are visible in this goroutine.
 		}
@@ -438,15 +434,15 @@ func (s *Executor[Data]) execute(
 		// Check the result of the execution. Help log the error if there's a panic. Otherwise, we continue using
 		// the given SubprocessResult. When panicking, we always act as if SRFailed is returned.
 		if res.panicErr != nil {
-			s.logger.FatalErr(trace, err).
-				Msg(fmt.Sprintf("%v: Panic in subprocess execution of job %v!", s.serviceName, jobId))
-			return mend.Wrap(SubprocessFailed, true).
+			msg := fmt.Sprintf("%v: Panic in subprocess execution of job %v!", s.serviceName, jobId)
+			s.logger.Fatal(traceId, msg, map[string]any{"err": err})
+			return util.WrapErr(SubprocessFailed, true).
 				Msg(fmt.Sprintf("subprocess %v failed: %v", curJob.NextSubprocess, res.panicErr.Error()))
 		}
 
 		switch res.result {
 		case SRFailed:
-			return mend.Wrap(SubprocessFailed, true).
+			return util.WrapErr(SubprocessFailed, true).
 				Msg(fmt.Sprintf("subprocess %v failed!", curJob.NextSubprocess))
 		case SREarlyExitDone:
 			// Early exit, break SubprocessLoop and go straight to marking job as done.
@@ -497,10 +493,10 @@ func (s *Executor[Data]) executeSubprocess(
 ) {
 	defer func() {
 		if pErr := recover(); pErr != nil {
-			msg := fmt.Sprintf("%v: panic on execution: %v", s.serviceName, pErr)
+			msg := fmt.Sprintf("%v: panic on execution: %v, job ID: %v", s.serviceName, pErr, curJob.JobId)
 			cRet <- &execResult{
 				result:   SRFailed,
-				panicErr: mend.Err(msg, true).Str("job", curJob),
+				panicErr: util.Err(msg, true),
 			}
 		}
 	}()
@@ -520,7 +516,7 @@ func (s *Executor[Data]) executeSubprocess(
 func (s *Executor[Data]) pingHeartbeat(
 	ctx context.Context,
 	ctxCancel func(),
-	trace *tr.Trace,
+	traceId string,
 	goroutineId string,
 	jobId string,
 ) {
@@ -532,8 +528,8 @@ func (s *Executor[Data]) pingHeartbeat(
 		// Report whenever there's an error.
 		if pErr := recover(); pErr != nil {
 			msg := fmt.Sprintf("%v: panic on heartbeat ping: %v, jobId: %v", s.serviceName, pErr, jobId)
-			err := mend.Err(msg, true)
-			s.logger.ErrorErr(trace, err).Msg(msg)
+			err := util.Err(msg, true)
+			s.logger.Error(traceId, msg, map[string]any{"err": err})
 		}
 	}()
 
@@ -578,21 +574,22 @@ func (s *Executor[Data]) pingHeartbeat(
 				// If the error is caused by context timeout, we don't have to retry, as when we retry the result
 				// will be the same. Log this as we don't expect many execution timeout error.
 				if errors.Is(err, context.DeadlineExceeded) {
-					s.logger.WarnErr(trace, err).
-						Msg("Fail to send heartbeat (main context deadline exceeded)")
+					s.logger.Warn(
+						traceId, "Fail to send heartbeat (main context deadline exceeded)",
+						map[string]any{"err": err},
+					)
 					return
 				}
 
 				failCount++
 				ctxErr := ctx.Err()
-				s.logger.ErrorErr(trace, err).
-					MarshalJson("ctxErr", ctxErr).
-					Msg(fmt.Sprintf(
-						"%v: Fail to send heartbeat %v (%v): %v",
-						s.serviceName,
-						i, jobId,
-						err.Error(),
-					))
+				msg := fmt.Sprintf(
+					"%v: Fail to send heartbeat %v (%v): %v",
+					s.serviceName,
+					i, jobId,
+					err.Error(),
+				)
+				s.logger.Error(traceId, msg, map[string]any{"err": err, "ctxErr": ctxErr})
 			}
 
 			// If we fail to send heartbeat 3 times in a row, consider the lease to be out, don't continue.

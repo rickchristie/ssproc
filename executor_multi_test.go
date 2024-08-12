@@ -1,12 +1,11 @@
 package ssproc
 
 import (
+	"github.com/rickchristie/ssproc/pgtest"
+	"github.com/rickchristie/ssproc/util"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/goleak"
 	"math/rand"
-	"rukita.co/main/be/accessor/db/pg/pgtest"
-	"rukita.co/main/be/lib/test"
-	"rukita.co/main/be/lib/tr"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -32,13 +31,14 @@ func TestMultiSubprocess_SingleJobError(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
 	proc := newMultiProcess()
 	process := proc.(*multiProcess)
-	client := NewClient(s.Storage, proc)
+	utilTime := util.NewGlobalTime(time.Local)
+	client := NewClient(s.Storage, proc, utilTime)
 
 	//s.Storage._sendTestLog(100000)
 
@@ -157,13 +157,14 @@ func TestMultiSubprocess_SingleJobPanic(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
 	proc := newMultiProcess()
 	process := proc.(*multiProcess)
-	client := NewClient(s.Storage, proc)
+	utilTime := util.NewGlobalTime(time.Local)
+	client := NewClient(s.Storage, proc, utilTime)
 
 	executorA := newExecutor(t, s, proc, "ExecutorA")
 	executorA.config.SweepInterval = 300 * time.Millisecond
@@ -277,13 +278,14 @@ func TestMultiSubprocess_MultipleJobsSuccess(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
 	proc := newMultiProcess()
 	process := proc.(*multiProcess)
-	client := NewClient[*multiJobData](s.Storage, proc)
+	utilTime := util.NewGlobalTime(time.Local)
+	client := NewClient[*multiJobData](s.Storage, proc, utilTime)
 
 	// Insert jobs first, so we don't have race condition on map read/write.
 	jobCount := 1000
@@ -327,13 +329,14 @@ func TestMultiSubprocess_SaveData_InTheMiddle(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
 	proc := newMultiProcess()
 	process := proc.(*multiProcess)
-	client := NewClient[*multiJobData](s.Storage, proc)
+	utilTime := util.NewGlobalTime(time.Local)
+	client := NewClient[*multiJobData](s.Storage, proc, utilTime)
 
 	errInTheMiddle := atomic.Bool{}
 	errInTheMiddle.Store(true)
@@ -377,7 +380,7 @@ func TestMultiSubprocess_SaveData_InTheMiddle(t *testing.T) {
 	assert.Nil(t, err)
 
 	// Wait until JobData is updated.
-	err = test.Await(5*time.Second, func() bool {
+	err = util.Await(5*time.Second, func() bool {
 		found, _ := s.h.GetJob(t, jobData.JobId)
 		foundData, err := process.Deserialize(found.JobData)
 		assert.Nil(t, err)
@@ -395,7 +398,7 @@ func TestMultiSubprocess_SaveData_InTheMiddle(t *testing.T) {
 	assertJobFailExec[*multiJobData](t, s.h, process, foundData, 1, 0, regTime)
 
 	// Wait until job is taken over again, we expect data to be updated once again.
-	err = test.Await(5*time.Second, func() bool {
+	err = util.Await(5*time.Second, func() bool {
 		found, _ := s.h.GetJob(t, jobData.JobId)
 		foundData, err := process.Deserialize(found.JobData)
 		assert.Nil(t, err)
@@ -442,13 +445,14 @@ func TestMultiSubprocess_SaveData_RetriesUntilMaxCount(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
 	proc := newMultiProcess()
 	process := proc.(*multiProcess)
-	client := NewClient[*multiJobData](s.Storage, proc)
+	utilTime := util.NewGlobalTime(time.Local)
+	client := NewClient[*multiJobData](s.Storage, proc, utilTime)
 
 	// Each subprocess have 30% chance of failure.
 	sum := atomic.Int64{}
@@ -570,13 +574,14 @@ func TestMultiSubprocess_SaveData_RequestContextRandomCanceled(t *testing.T) {
 	//			- Lock on the subprocess entity.
 	//			- Updating data and releasing the lock happening at the same time.
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
 	proc := newMultiProcess()
 	process := proc.(*multiProcess)
-	client := NewClient[*multiJobData](s.Storage, proc)
+	utilTime := util.NewGlobalTime(time.Local)
+	client := NewClient[*multiJobData](s.Storage, proc, utilTime)
 
 	sum := atomic.Int64{}
 	process.stub = func(
@@ -721,13 +726,14 @@ func TestMultiSubprocess_LeaseExpireIsHonored(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
 	proc := newMultiProcess()
 	process := proc.(*multiProcess)
-	client := NewClient[*multiJobData](s.Storage, proc)
+	utilTime := util.NewGlobalTime(time.Local)
+	client := NewClient[*multiJobData](s.Storage, proc, utilTime)
 
 	// We'll make a stub that sleeps a long time, so we can make sure that another executor does not take over the
 	// job if lease expiry is still updated.
@@ -760,7 +766,7 @@ func TestMultiSubprocess_LeaseExpireIsHonored(t *testing.T) {
 	err := client.Register(s.h.Ctx, jobData)
 	assert.Nil(t, err)
 
-	err = test.Await(5*time.Second, func() bool {
+	err = util.Await(5*time.Second, func() bool {
 		job, _ := s.h.GetJob(t, jobData.JobId)
 		return job.GoroutineId != ""
 	})
@@ -787,7 +793,7 @@ func TestMultiSubprocess_LeaseExpireIsHonored(t *testing.T) {
 	expectedTime := time.Now()
 	for i := 0; i < 45; i++ {
 		expectedTime = expectedTime.Add(100 * time.Millisecond)
-		err = test.Await(8*time.Second, func() bool {
+		err = util.Await(8*time.Second, func() bool {
 			found, _ := s.h.GetJob(t, jobData.JobId)
 			assert.Equal(t, goroutineId, found.GoroutineId)
 
@@ -823,13 +829,14 @@ func TestMultiSubprocess_EarlyExitDone(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
 	proc := newMultiProcess()
 	process := proc.(*multiProcess)
-	client := NewClient[*multiJobData](s.Storage, proc)
+	utilTime := util.NewGlobalTime(time.Local)
+	client := NewClient[*multiJobData](s.Storage, proc, utilTime)
 
 	earlyExitAt := atomic.Int64{}
 	shouldEarlyExit := atomic.Bool{}
@@ -910,13 +917,14 @@ func TestMultiSubprocess_EarlyExitError(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
 	proc := newMultiProcess()
 	process := proc.(*multiProcess)
-	client := NewClient[*multiJobData](s.Storage, proc)
+	utilTime := util.NewGlobalTime(time.Local)
+	client := NewClient[*multiJobData](s.Storage, proc, utilTime)
 
 	earlyExitAt := atomic.Int64{}
 	shouldEarlyExit := atomic.Bool{}
@@ -999,13 +1007,14 @@ func TestMultiSubprocess_RegisterExecute(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
 	proc := newMultiProcess()
 	process := proc.(*multiProcess)
-	client := NewClient[*multiJobData](s.Storage, proc)
+	utilTime := util.NewGlobalTime(time.Local)
+	client := NewClient[*multiJobData](s.Storage, proc, utilTime)
 
 	// We'll make a stub that sleeps, to test that RegisterExecute blocks until task is completed.
 	delayDuration := atomic.Int64{}
@@ -1042,8 +1051,8 @@ func TestMultiSubprocess_RegisterExecute(t *testing.T) {
 	delayDuration.Store(int64(2 * time.Second))
 	jobData = process.newJobData()
 	startTime := time.Now()
-	traceId := test.UUIDString()
-	latestData, err := executorA.RegisterExecuteWait(s.h.Ctx, &tr.Trace{TraceId: traceId}, jobData)
+	traceId := util.UUIDString()
+	latestData, err := executorA.RegisterExecuteWait(s.h.Ctx, traceId, jobData)
 	assert.Nil(t, err)
 	assertJobDataIsLatest(t, s.h, proc, latestData)
 
@@ -1070,7 +1079,7 @@ func TestMultiSubprocess_RegisterExecuteTakenOver(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
@@ -1108,8 +1117,8 @@ func TestMultiSubprocess_RegisterExecuteTakenOver(t *testing.T) {
 	// RegisterExecute a job, this first execution will end in an error.
 	jobData := process.newJobData()
 	startTime := time.Now()
-	traceId := test.UUIDString()
-	latest, err := executorA.RegisterExecuteWait(s.h.Ctx, &tr.Trace{TraceId: traceId}, jobData)
+	traceId := util.UUIDString()
+	latest, err := executorA.RegisterExecuteWait(s.h.Ctx, traceId, jobData)
 	assert.NotNil(t, err)
 	assertJobDataIsLatest(t, s.h, proc, latest)
 
@@ -1128,7 +1137,7 @@ func TestMultiSubprocess_RegisterExecuteTakenOver(t *testing.T) {
 
 	// Wait until the executor picks it up.
 	// Max wait time is LeaseExpireDuration + SweepInterval + SweepIntervalJitter.
-	err = test.Await(10*time.Second, func() bool {
+	err = util.Await(10*time.Second, func() bool {
 		return runCount.Load() == int64(2)
 	})
 	assert.Nil(t, err)
@@ -1171,13 +1180,14 @@ func TestMultiSubprocess_StartAfter(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
 	proc := newMultiProcess()
 	process := proc.(*multiProcess)
-	client := NewClient[*multiJobData](s.Storage, proc)
+	utilTime := util.NewGlobalTime(time.Local)
+	client := NewClient[*multiJobData](s.Storage, proc, utilTime)
 
 	executorA := newExecutor(t, s, proc, "ExecutorA")
 	executorA.config.SweepInterval = 2 * time.Second

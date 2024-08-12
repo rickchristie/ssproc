@@ -4,13 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/rickchristie/ssproc/pgtest"
+	"github.com/rickchristie/ssproc/plugs"
+	"github.com/rickchristie/ssproc/util"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/goleak"
 	"math/rand"
-	"rukita.co/main/be/accessor/db/pg/pgtest"
-	"rukita.co/main/be/lib/mend"
-	"rukita.co/main/be/lib/test"
-	"rukita.co/main/be/lib/tr"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -85,7 +84,7 @@ func (s *singleIncProcess) GetSubprocesses() []*Subprocess[*singleIncJob] {
 func (s *singleIncProcess) Serialize(jobData *singleIncJob) (serialized string, err error) {
 	bytes, err := json.Marshal(jobData)
 	if err != nil {
-		return "", mend.Wrap(err, true)
+		return "", util.WrapErr(err, true)
 	}
 	return string(bytes), nil
 }
@@ -94,7 +93,7 @@ func (s *singleIncProcess) Deserialize(serialized string) (jobData *singleIncJob
 	jobData = &singleIncJob{}
 	err = json.Unmarshal([]byte(serialized), jobData)
 	if err != nil {
-		return nil, mend.Wrap(err, true)
+		return nil, util.WrapErr(err, true)
 	}
 	return jobData, nil
 }
@@ -112,7 +111,9 @@ func newExecutor[Data JobData](t *testing.T, s *State, proc Process[Data], name 
 		ExecutionTimeout:    10 * time.Second,
 		MaxExecutionCount:   3,
 	}
-	executor, err := NewExecutor(s.Db.DebugCtx, proc, s.Storage, config)
+	logger := plugs.DefaultLogger("ExecutorTest")
+	utilTime := util.NewGlobalTime(time.Local)
+	executor, err := NewExecutor(s.Db.DebugCtx, proc, s.Storage, config, logger, utilTime)
 	assert.Nil(t, err)
 	return executor
 }
@@ -125,13 +126,14 @@ func TestSingleSubprocess_SingleJobSuccessFailure(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
 	process := &singleIncProcess{processId: "increment"}
 	var proc Process[*singleIncJob] = process
-	client := NewClient(s.Storage, proc)
+	utilTime := util.NewGlobalTime(time.Local)
+	client := NewClient(s.Storage, proc, utilTime)
 
 	executorA := newExecutor(t, s, proc, "ExecutorA")
 	executorA.Start()
@@ -147,7 +149,7 @@ func TestSingleSubprocess_SingleJobSuccessFailure(t *testing.T) {
 		assert.Nil(t, err)
 
 		// Wait until the job is complete.
-		err = test.Await(5*time.Hour, func() bool {
+		err = util.Await(5*time.Hour, func() bool {
 			found, _ := s.h.GetJob(t, jobData.JobId)
 			return found.Status == JSDone
 		})
@@ -175,7 +177,7 @@ func TestSingleSubprocess_SingleJobSuccessFailure(t *testing.T) {
 
 		// Wait until the job is complete.
 		// LeaseExpiry is 3 seconds, which means we need to wait ~9 seconds.
-		err = test.Await(12*time.Second, func() bool {
+		err = util.Await(12*time.Second, func() bool {
 			found, _ := s.h.GetJob(t, jobData.JobId)
 			return found.Status == JSError
 		})
@@ -213,14 +215,15 @@ func TestSingleSubprocess_StartAfter(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
 	// This process is the correct process.
 	process := &singleIncProcess{processId: "increment"}
 	var proc Process[*singleIncJob] = process
-	client := NewClient(s.Storage, proc)
+	utilTime := util.NewGlobalTime(time.Local)
+	client := NewClient(s.Storage, proc, utilTime)
 
 	executorA := newExecutor(t, s, proc, "ExecutorA")
 	executorA.config.SweepInterval = 2 * time.Second
@@ -312,13 +315,14 @@ func TestSingleSubprocess_MultipleJobs_SingleExecutor(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
 	process := &singleIncProcess{processId: "increment"}
 	var proc Process[*singleIncJob] = process
-	client := NewClient(s.Storage, proc)
+	utilTime := util.NewGlobalTime(time.Local)
+	client := NewClient(s.Storage, proc, utilTime)
 
 	// Increase executorA's submitted jobs and frequency of sweeping.
 	executorA := newExecutor(t, s, proc, "ExecutorA")
@@ -338,7 +342,7 @@ func TestSingleSubprocess_MultipleJobs_SingleExecutor(t *testing.T) {
 		inc := int64(rand.Intn(1000))
 		expectedSum += inc
 		jobData := &singleIncJob{
-			JobId:     test.UUIDString(),
+			JobId:     util.UUIDString(),
 			Increment: inc,
 		}
 
@@ -348,7 +352,7 @@ func TestSingleSubprocess_MultipleJobs_SingleExecutor(t *testing.T) {
 		insertedJobs = append(insertedJobs, jobData)
 	}
 
-	err := test.Await(2*time.Minute, func() bool {
+	err := util.Await(2*time.Minute, func() bool {
 		return process.incrementCount.Load() >= expectedCount
 	})
 	assert.Nil(t, err)
@@ -385,19 +389,20 @@ func TestSingleSubprocess_ExecutorIgnoreOtherProcessJobs(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
 	// Create main process.
 	processA := &singleIncProcess{processId: "processA"}
 	var procA Process[*singleIncJob] = processA
-	clientA := NewClient(s.Storage, procA)
+	utilTime := util.NewGlobalTime(time.Local)
+	clientA := NewClient(s.Storage, procA, utilTime)
 
 	// Create another process.
 	processB := &singleIncProcess{processId: "processB"}
 	var procB Process[*singleIncJob] = processB
-	clientB := NewClient(s.Storage, procB)
+	clientB := NewClient(s.Storage, procB, utilTime)
 
 	// Increase executorA's submitted jobs and frequency of sweeping.
 	executorA := newExecutor(t, s, procA, "ExecutorA")
@@ -413,7 +418,7 @@ func TestSingleSubprocess_ExecutorIgnoreOtherProcessJobs(t *testing.T) {
 	for i := 0; i < jobsCount; i++ {
 		inc := int64(rand.Intn(1000))
 		jobData := &singleIncJob{
-			JobId:     test.UUIDString(),
+			JobId:     util.UUIDString(),
 			Increment: inc,
 		}
 
@@ -432,7 +437,7 @@ func TestSingleSubprocess_ExecutorIgnoreOtherProcessJobs(t *testing.T) {
 		inc := int64(rand.Intn(1000))
 		expectedSum += inc
 		jobData := &singleIncJob{
-			JobId:     test.UUIDString(),
+			JobId:     util.UUIDString(),
 			Increment: inc,
 		}
 
@@ -442,7 +447,7 @@ func TestSingleSubprocess_ExecutorIgnoreOtherProcessJobs(t *testing.T) {
 		insertedJobsA = append(insertedJobsA, jobData)
 	}
 
-	err := test.Await(2*time.Minute, func() bool {
+	err := util.Await(2*time.Minute, func() bool {
 		return processA.incrementCount.Load() >= expectedCount
 	})
 	assert.Nil(t, err)
@@ -502,19 +507,20 @@ func TestSingleSubprocess_ExecutorOnlyWorkOnSameProcessId(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
 	// Create main process.
 	processA := &singleIncProcess{processId: "processA"}
 	var procA Process[*singleIncJob] = processA
-	clientA := NewClient(s.Storage, procA)
+	utilTime := util.NewGlobalTime(time.Local)
+	clientA := NewClient(s.Storage, procA, utilTime)
 
 	// Create another process.
 	processB := &singleIncProcess{processId: "processB"}
 	var procB Process[*singleIncJob] = processB
-	clientB := NewClient(s.Storage, procB)
+	clientB := NewClient(s.Storage, procB, utilTime)
 
 	// Increase executorA's submitted jobs and frequency of sweeping.
 	executorA := newExecutor(t, s, procA, "ExecutorA")
@@ -540,7 +546,7 @@ func TestSingleSubprocess_ExecutorOnlyWorkOnSameProcessId(t *testing.T) {
 		inc := int64(rand.Intn(1000))
 		expectedSumB += inc
 		jobData := &singleIncJob{
-			JobId:     test.UUIDString(),
+			JobId:     util.UUIDString(),
 			Increment: inc,
 		}
 
@@ -559,7 +565,7 @@ func TestSingleSubprocess_ExecutorOnlyWorkOnSameProcessId(t *testing.T) {
 		inc := int64(rand.Intn(1000))
 		expectedSumA += inc
 		jobData := &singleIncJob{
-			JobId:     test.UUIDString(),
+			JobId:     util.UUIDString(),
 			Increment: inc,
 		}
 
@@ -569,7 +575,7 @@ func TestSingleSubprocess_ExecutorOnlyWorkOnSameProcessId(t *testing.T) {
 		insertedJobsA = append(insertedJobsA, jobData)
 	}
 
-	err := test.Await(2*time.Minute, func() bool {
+	err := util.Await(2*time.Minute, func() bool {
 		return processA.incrementCount.Load() >= expectedCountA &&
 			processB.incrementCount.Load() >= expectedCountB
 	})
@@ -640,14 +646,15 @@ func TestSingleSubprocess_MultipleJobs_MultipleExecutors(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
 	process := &singleIncProcess{processId: "increment"}
 	process.shouldWait = true
 	var proc Process[*singleIncJob] = process
-	client := NewClient(s.Storage, proc)
+	utilTime := util.NewGlobalTime(time.Local)
+	client := NewClient(s.Storage, proc, utilTime)
 
 	//s.Storage._sendTestLog(10000000)
 
@@ -683,7 +690,7 @@ func TestSingleSubprocess_MultipleJobs_MultipleExecutors(t *testing.T) {
 		inc := int64(rand.Intn(1000))
 		expectedSum += inc
 		jobData := &singleIncJob{
-			JobId:     test.UUIDString(),
+			JobId:     util.UUIDString(),
 			Increment: inc,
 		}
 
@@ -693,7 +700,7 @@ func TestSingleSubprocess_MultipleJobs_MultipleExecutors(t *testing.T) {
 		insertedJobs = append(insertedJobs, jobData)
 	}
 
-	err := test.Await(5*time.Minute, func() bool {
+	err := util.Await(5*time.Minute, func() bool {
 		count := s.h.CountNotDoneJobs(t, proc.Id())
 		return count == 0
 	})
@@ -747,13 +754,14 @@ func TestSingleSubprocess_RetriesUntilMaxCount(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
 	process := &singleIncProcess{processId: "increment"}
 	var proc Process[*singleIncJob] = process
-	client := NewClient(s.Storage, proc)
+	utilTime := util.NewGlobalTime(time.Local)
+	client := NewClient(s.Storage, proc, utilTime)
 
 	// 30% chance of failure.
 	// When MaxExecCount is 1000, there should be at least 1 time it's successful.
@@ -781,7 +789,7 @@ func TestSingleSubprocess_RetriesUntilMaxCount(t *testing.T) {
 		inc := int64(rand.Intn(1000))
 		expectedSum += inc
 		jobData := &singleIncJob{
-			JobId:     test.UUIDString(),
+			JobId:     util.UUIDString(),
 			Increment: inc,
 		}
 
@@ -791,7 +799,7 @@ func TestSingleSubprocess_RetriesUntilMaxCount(t *testing.T) {
 		insertedJobs = append(insertedJobs, jobData)
 	}
 
-	err := test.Await(2*time.Minute, func() bool {
+	err := util.Await(2*time.Minute, func() bool {
 		return process.incrementCount.Load() >= expectedCount
 	})
 	assert.Nil(t, err)
@@ -834,13 +842,14 @@ func TestSingleSubprocess_UpdatesHeartbeatAndTimesOut(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
 	process := &singleIncProcess{processId: "increment"}
 	var proc Process[*singleIncJob] = process
-	client := NewClient(s.Storage, proc)
+	utilTime := util.NewGlobalTime(time.Local)
+	client := NewClient(s.Storage, proc, utilTime)
 
 	done := make(chan struct{})
 	process.ExecuteStub = func(
@@ -893,7 +902,7 @@ func TestSingleSubprocess_UpdatesHeartbeatAndTimesOut(t *testing.T) {
 	assert.Nil(t, err)
 
 	// Wait until the job is taken over.
-	err = test.Await(4*time.Second, func() bool {
+	err = util.Await(4*time.Second, func() bool {
 		found, _ := s.h.GetJob(t, jobData.JobId)
 		return found.GoroutineId != ""
 	})
@@ -910,7 +919,7 @@ func TestSingleSubprocess_UpdatesHeartbeatAndTimesOut(t *testing.T) {
 	expectedTime := time.Now()
 	for i := 0; i < 25; i++ {
 		expectedTime = expectedTime.Add(100 * time.Millisecond)
-		err = test.Await(1*time.Second, func() bool {
+		err = util.Await(1*time.Second, func() bool {
 			found, _ := s.h.GetJob(t, jobData.JobId)
 			assert.Equal(t, goroutineId, found.GoroutineId)
 
@@ -928,7 +937,7 @@ func TestSingleSubprocess_UpdatesHeartbeatAndTimesOut(t *testing.T) {
 	}
 
 	// The execution will time out. We expect it to be taken by a new goroutine.
-	err = test.Await(7*time.Second, func() bool {
+	err = util.Await(7*time.Second, func() bool {
 		found, _ := s.h.GetJob(t, jobData.JobId)
 		return found.GoroutineId != goroutineId
 	})
@@ -941,7 +950,7 @@ func TestSingleSubprocess_UpdatesHeartbeatAndTimesOut(t *testing.T) {
 	expectedTime = time.Now()
 	for i := 0; i < 25; i++ {
 		expectedTime = expectedTime.Add(100 * time.Millisecond)
-		err = test.Await(5*time.Second, func() bool {
+		err = util.Await(5*time.Second, func() bool {
 			found, _ := s.h.GetJob(t, jobData.JobId)
 			assert.Equal(t, goroutineId, found.GoroutineId)
 
@@ -959,7 +968,7 @@ func TestSingleSubprocess_UpdatesHeartbeatAndTimesOut(t *testing.T) {
 	}
 
 	// The execution will time out. It will be marked as error.
-	err = test.Await(10*time.Second, func() bool {
+	err = util.Await(10*time.Second, func() bool {
 		found, _ := s.h.GetJob(t, jobData.JobId)
 		return found.Status == JSError
 	})
@@ -997,14 +1006,15 @@ func TestSingleSubprocess_MultipleExecutor_TakeOver(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
 	// This process is the correct process.
 	process := &singleIncProcess{processId: "increment"}
 	var proc Process[*singleIncJob] = process
-	client := NewClient(s.Storage, proc)
+	utilTime := util.NewGlobalTime(time.Local)
+	client := NewClient(s.Storage, proc, utilTime)
 
 	// This second process will stall, and then will not return at all, forcing execution timeout error.
 	processStall := &singleIncProcess{processId: "increment"}
@@ -1048,7 +1058,7 @@ func TestSingleSubprocess_MultipleExecutor_TakeOver(t *testing.T) {
 	// Then wait until job is worked on by ExecutorA.
 	executorA.sweepJobs()
 	startTime := time.Now()
-	err = test.Await(4*time.Second, func() bool {
+	err = util.Await(4*time.Second, func() bool {
 		found, _ := s.h.GetJob(t, jobData.JobId)
 		return found.GoroutineId != ""
 	})
@@ -1067,7 +1077,7 @@ func TestSingleSubprocess_MultipleExecutor_TakeOver(t *testing.T) {
 	defer executorB.Stop()
 
 	// Wait until the job is picked up by executorB.
-	err = test.Await(12*time.Second, func() bool {
+	err = util.Await(12*time.Second, func() bool {
 		found, _ := s.h.GetJob(t, jobData.JobId)
 		return found.GoroutineId != goroutineId
 	})
@@ -1090,7 +1100,7 @@ func TestSingleSubprocess_MultipleExecutor_TakeOver(t *testing.T) {
 	goroutineId = found.GoroutineId
 
 	// Wait until the job is done.
-	err = test.Await(2*time.Second, func() bool {
+	err = util.Await(2*time.Second, func() bool {
 		found, _ := s.h.GetJob(t, jobData.JobId)
 		return found.Status == JSDone
 	})
@@ -1127,7 +1137,7 @@ func TestSingleSubprocess_RegisterExecute(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
@@ -1140,7 +1150,7 @@ func TestSingleSubprocess_RegisterExecute(t *testing.T) {
 	process := newTestProcess("delay", func() *delayJob {
 		return &delayJob{}
 	})
-	counter := &test.Counter{}
+	counter := &util.Counter{}
 	process.subprocesses = []*Subprocess[*delayJob]{
 		{
 			Transaction: func(
@@ -1157,7 +1167,8 @@ func TestSingleSubprocess_RegisterExecute(t *testing.T) {
 		},
 	}
 	var proc Process[*delayJob] = process
-	client := NewClient(s.Storage, proc)
+	utilTime := util.NewGlobalTime(time.Local)
+	client := NewClient(s.Storage, proc, utilTime)
 
 	// Create and run executor.
 	executorA := newExecutor(t, s, proc, "ExecutorA")
@@ -1191,8 +1202,8 @@ func TestSingleSubprocess_RegisterExecute(t *testing.T) {
 	}
 
 	startTime := time.Now()
-	traceId := test.UUIDString()
-	latest, err := executorA.RegisterExecuteWait(s.h.Ctx, &tr.Trace{TraceId: traceId}, directJob)
+	traceId := util.UUIDString()
+	latest, err := executorA.RegisterExecuteWait(s.h.Ctx, traceId, directJob)
 	assert.Nil(t, err)
 	assertJobDataIsLatest(t, s.h, proc, latest)
 
@@ -1219,7 +1230,7 @@ func TestSingleSubprocess_RegisterExecutePanicPickedUp(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
@@ -1232,7 +1243,7 @@ func TestSingleSubprocess_RegisterExecutePanicPickedUp(t *testing.T) {
 	process := newTestProcess("delay", func() *failurePickUpJob {
 		return &failurePickUpJob{}
 	})
-	counter := &test.Counter{}
+	counter := &util.Counter{}
 	process.subprocesses = []*Subprocess[*failurePickUpJob]{
 		{
 			Transaction: func(
@@ -1270,12 +1281,12 @@ func TestSingleSubprocess_RegisterExecutePanicPickedUp(t *testing.T) {
 		TestJobData: &TestJobData{JobId: "direct-job"},
 	}
 	startTime := time.Now()
-	traceId := test.UUIDString()
-	latest, err := executorA.RegisterExecuteWait(s.h.Ctx, &tr.Trace{TraceId: traceId}, directJob)
+	traceId := util.UUIDString()
+	latest, err := executorA.RegisterExecuteWait(s.h.Ctx, traceId, directJob)
 	assert.NotNil(t, err)
 	assertJobDataIsLatest(t, s.h, proc, latest)
 	assert.Equal(
-		t, "subprocess 0 failed: ExecutorA-delay: panic on execution: this is an example panic failure",
+		t, "subprocess 0 failed: ExecutorA-delay: panic on execution: this is an example panic failure, job ID: direct-job",
 		err.Error(),
 	)
 
@@ -1294,7 +1305,7 @@ func TestSingleSubprocess_RegisterExecutePanicPickedUp(t *testing.T) {
 
 	// Wait for the executor to pick-it-up.
 	// Max wait time is LeaseExpireDuration + SweepInterval + SweepIntervalJitter.
-	err = test.Await(10*time.Second, func() bool {
+	err = util.Await(10*time.Second, func() bool {
 		return runCount.Load() == int64(2)
 	})
 	assert.Nil(t, err)
@@ -1338,7 +1349,7 @@ func TestSingleSubprocess_RegisterExecuteErrorReturned(t *testing.T) {
 		t.Parallel()
 	}
 
-	s := StateCreator().(*State)
+	s := StateCreator()
 	s.Setup(t)
 	defer s.TearDown(t)
 
@@ -1351,7 +1362,7 @@ func TestSingleSubprocess_RegisterExecuteErrorReturned(t *testing.T) {
 	process := newTestProcess("delay", func() *failurePickUpJob {
 		return &failurePickUpJob{}
 	})
-	counter := &test.Counter{}
+	counter := &util.Counter{}
 	process.subprocesses = []*Subprocess[*failurePickUpJob]{
 		{
 			Transaction: func(
@@ -1384,8 +1395,8 @@ func TestSingleSubprocess_RegisterExecuteErrorReturned(t *testing.T) {
 		TestJobData: &TestJobData{JobId: "direct-job"},
 	}
 	startTime := time.Now()
-	traceId := test.UUIDString()
-	latest, err := executorA.RegisterExecuteWait(s.h.Ctx, &tr.Trace{TraceId: traceId}, directJob)
+	traceId := util.UUIDString()
+	latest, err := executorA.RegisterExecuteWait(s.h.Ctx, traceId, directJob)
 	assert.NotNil(t, err)
 	assertJobDataIsLatest(t, s.h, proc, latest)
 	assert.Equal(

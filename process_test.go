@@ -3,8 +3,8 @@ package ssproc
 import (
 	"context"
 	"encoding/json"
+	"github.com/rickchristie/ssproc/util"
 	"github.com/stretchr/testify/assert"
-	"rukita.co/main/be/lib/test"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -119,7 +119,7 @@ func (m *multiProcess) newJobData() *multiJobData {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 
-	jobId := test.UUIDString()
+	jobId := util.UUIDString()
 	for i := 0; i < 3; i++ {
 		m.execCounts[i][jobId] = &atomic.Int64{}
 		m.execTime[i][jobId] = &atomic.Value{}

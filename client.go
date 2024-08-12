@@ -2,9 +2,7 @@ package ssproc
 
 import (
 	"context"
-	"rukita.co/main/be/data"
-	"rukita.co/main/be/lib/mend"
-	"rukita.co/main/be/lib/util"
+	"github.com/rickchristie/ssproc/util"
 	"time"
 )
 
@@ -14,11 +12,11 @@ type Client[Data JobData] struct {
 	utilTime util.Time
 }
 
-func NewClient[Data JobData](storage Storage, process Process[Data]) *Client[Data] {
+func NewClient[Data JobData](storage Storage, process Process[Data], utilTime util.Time) *Client[Data] {
 	return &Client[Data]{
 		storage:  storage,
 		process:  process,
-		utilTime: util.NewGlobalTime(data.DefaultTimeZone()),
+		utilTime: utilTime,
 	}
 }
 
@@ -30,7 +28,7 @@ func (c *Client[Data]) RegisterStartAfter(ctx context.Context, data Data, startA
 	jobId := data.GetJobId()
 	serialized, err := c.process.Serialize(data)
 	if err != nil {
-		return mend.Wrap(err, true)
+		return err
 	}
 
 	return c.storage.RegisterJob(ctx, &Job{

@@ -4,9 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/rickchristie/ssproc/util"
 	"github.com/stretchr/testify/assert"
-	"rukita.co/main/be/lib/test"
-	"rukita.co/main/be/lib/util"
 	"testing"
 	"time"
 )
@@ -119,7 +118,7 @@ func (h *PgTestHelper) SetLeaseExpireTime(t *testing.T, jobId string, leaseExpir
 }
 
 func (h *PgTestHelper) WaitJobStatus(t *testing.T, timeout time.Duration, jobId string, status JobStatus) {
-	err := test.Await(timeout, func() bool {
+	err := util.Await(timeout, func() bool {
 		job, _ := h.GetJob(t, jobId)
 		return job.Status == status
 	})
@@ -127,7 +126,7 @@ func (h *PgTestHelper) WaitJobStatus(t *testing.T, timeout time.Duration, jobId 
 }
 
 func (h *PgTestHelper) WaitJobGoroutineIdChanged(t *testing.T, timeout time.Duration, goroutineIds []string, jobId string) {
-	err := test.Await(timeout, func() bool {
+	err := util.Await(timeout, func() bool {
 		found, _ := h.GetJob(t, jobId)
 		return len(goroutineIds) < len(found.GoroutineIds)
 	})
@@ -141,7 +140,7 @@ func (h *PgTestHelper) WaitJobGoroutineIdChanged(t *testing.T, timeout time.Dura
 }
 
 func (h *PgTestHelper) WaitAllJobsDone(t *testing.T, timeout time.Duration, processId string) {
-	err := test.Await(timeout, func() bool {
+	err := util.Await(timeout, func() bool {
 		count := h.CountNotDoneJobs(t, processId)
 		return count == 0
 	})
@@ -271,58 +270,3 @@ func assertJobDataIsLatest[Data JobData](t *testing.T, h *PgTestHelper, process 
 	assert.Nil(t, err)
 	assert.Equal(t, jobData, foundJobData)
 }
-
-//type MappedLock struct {
-//	mainLock sync.Mutex
-//	locks    atomic.Value
-//	values   atomic.Value
-//}
-//
-//func (m *MappedLock) InitKey(key string) {
-//	m.mainLock.Lock()
-//	defer m.mainLock.Unlock()
-//
-//	val := m.locks.Load()
-//	if val == nil {
-//		m.locks.Store(map[string]*sync.Mutex{
-//			key: {},
-//		})
-//		m.values.Store(map[string]any{
-//			key: nil,
-//		})
-//		return
-//	}
-//
-//	locks := val.(map[string]*sync.Mutex)
-//	if locks[key] != nil {
-//		return
-//	}
-//
-//	// Otherwise cast to map, and store a new map.
-//	// We know the following:
-//	// 		- InitKey(K) always happens before GetLock(K) - because we call it first.
-//	//		- GetLock(K) is loading atomic value. According to Go docs on atomic:
-//	//			- Additionally, all the atomic operations executed in a program behave as though executed in some
-//	//			  sequentially consistent order.
-//	// Which means:
-//	//		- Writes by InitKey(K) is visible to GetLock(K).
-//	//		- All GetLock(K) always get the same lock.
-//
-//	// Write new lock.
-//	newLocks := make(map[string]*sync.Mutex, len(locks)+1)
-//	for k, v := range locks {
-//		newLocks[k] = v
-//	}
-//	newLocks[key] = &sync.Mutex{}
-//	m.locks.Store(newLocks)
-//
-//	// Write
-//	values := m.values.Load().(map[string]any)
-//	newValues := make(map[string]any, len(values))
-//
-//}
-//
-//func (m *MappedLock) GetLock(key string) *sync.Mutex {
-//	locks := m.locks.Load().(map[string]*sync.Mutex)
-//	return locks[key]
-//}

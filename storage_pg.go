@@ -7,9 +7,8 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"rukita.co/main/be/data"
-	"rukita.co/main/be/lib/mend"
-	"rukita.co/main/be/lib/util"
+	"github.com/rickchristie/ssproc/plugs"
+	"github.com/rickchristie/ssproc/util"
 	"time"
 )
 
@@ -19,7 +18,7 @@ type PgStorage struct {
 	connStr   string
 	table     string
 	schema    string
-	logger    *mend.ZerologLogger
+	logger    plugs.Logger
 	txTimeout time.Duration
 	utilTime  util.Time
 
@@ -31,14 +30,23 @@ type PgStorage struct {
 	_cTestLog        chan *testLog
 }
 
-func NewPgStorage(connStr string, schemaName string, tableName string) (*PgStorage, error) {
+func NewPgStorage(
+	connStr string,
+	schemaName string,
+	tableName string,
+	logger plugs.Logger,
+	utilTime util.Time,
+) (
+	*PgStorage,
+	error,
+) {
 	ret := &PgStorage{
 		connStr:   connStr,
 		schema:    schemaName,
 		table:     tableName,
-		logger:    mend.NewZerologLogger("PgStorage"),
+		logger:    logger,
 		txTimeout: 5 * time.Second,
-		utilTime:  util.NewGlobalTime(data.DefaultTimeZone()),
+		utilTime:  utilTime,
 	}
 
 	err := ret.verifySchema()
@@ -66,7 +74,7 @@ func (s *PgStorage) beginTx(ctx context.Context) (
 	conn, err := pgx.Connect(timeoutCtx, s.connStr)
 	if err != nil {
 		defer cancelCtx()
-		return nil, nil, nil, mend.Wrap(err, true)
+		return nil, nil, nil, util.WrapErr(err, true)
 	}
 
 	// This cancel function will cancel both the connection and the context.
@@ -76,8 +84,10 @@ func (s *PgStorage) beginTx(ctx context.Context) (
 		err = conn.Close(timeoutCtx)
 		if err != nil {
 			if errors.Is(err, pgx.ErrTxClosed) == false {
-				s.logger.ErrorNoTrace().Error(mend.Wrap(err, true)).
-					Msg("failed to close connection for ssproc")
+				s.logger.Error(
+					"", "failed to close connection for ssproc",
+					map[string]any{"err": util.WrapErr(err, true)},
+				)
 			}
 		}
 	}
@@ -89,7 +99,7 @@ func (s *PgStorage) beginTx(ctx context.Context) (
 	))
 	if err != nil {
 		defer cancelCtxAndConn()
-		return nil, nil, nil, mend.Wrap(err, true)
+		return nil, nil, nil, util.WrapErr(err, true)
 	}
 
 	opts := pgx.TxOptions{
@@ -114,7 +124,7 @@ func (s *PgStorage) beginTx(ctx context.Context) (
 	tx, err = conn.BeginTx(timeoutCtx, opts)
 	if err != nil {
 		defer s.rollback(timeoutCtx, cancelCtxAndConn, tx)
-		return nil, nil, nil, mend.Wrap(err, true)
+		return nil, nil, nil, util.WrapErr(err, true)
 	}
 
 	return tx, timeoutCtx, cancelCtxAndConn, nil
@@ -145,9 +155,9 @@ func (s *PgStorage) rollback(ctx context.Context, cancelCtxAndConn func(), tx pg
 			return
 		}
 
-		err = mend.Wrap(err, true)
+		err = util.WrapErr(err, true)
 		msg := fmt.Sprintf("failed to rollback for table: %v.%v", s.schema, s.table)
-		s.logger.ErrorNoTrace().Error(err).Msg(msg)
+		s.logger.Error("", msg, map[string]any{"err": err})
 	}
 }
 
@@ -415,7 +425,7 @@ func (s *PgStorage) verifySchema() error {
 			AND table_name = $2;`
 	rows, err := tx.Query(ctx, query, s.schema, s.table)
 	if err != nil {
-		return mend.Wrap(err, true)
+		return util.WrapErr(err, true)
 	}
 
 	defer rows.Close()
@@ -430,7 +440,7 @@ func (s *PgStorage) verifySchema() error {
 			&maxLength,
 		)
 		if err != nil {
-			return mend.Wrap(err, true)
+			return util.WrapErr(err, true)
 		}
 
 		col.columnDefault = colDefault.String
@@ -447,7 +457,7 @@ func (s *PgStorage) verifySchema() error {
 		found := cols[req.columnName]
 		errMsg := req.isEqual(s.schema, s.table, found)
 		if errMsg != "" {
-			return mend.Err(errMsg, true)
+			return util.Err(errMsg, true)
 		}
 	}
 
@@ -476,7 +486,7 @@ func (s *PgStorage) verifyIndex() error {
 		    schemaname = $1 AND tablename = $2`
 	rows, err := tx.Query(ctx, query, s.schema, s.table)
 	if err != nil {
-		return mend.Wrap(err, true)
+		return util.WrapErr(err, true)
 	}
 
 	defer rows.Close()
@@ -486,14 +496,14 @@ func (s *PgStorage) verifyIndex() error {
 		var name, def string
 		err = rows.Scan(&name, &def)
 		if err != nil {
-			return mend.Wrap(err, true)
+			return util.WrapErr(err, true)
 		}
 
 		indexes[name] = def
 	}
 	err = rows.Err()
 	if err != nil {
-		return mend.Wrap(err, true)
+		return util.WrapErr(err, true)
 	}
 
 	if len(indexes) == 0 {
@@ -501,7 +511,7 @@ func (s *PgStorage) verifyIndex() error {
 			"%v.%v: no index found! expected 1 primary key index",
 			s.schema, s.table,
 		)
-		return mend.Err(msg, true)
+		return util.Err(msg, true)
 	}
 
 	if len(indexes) != 2 {
@@ -509,7 +519,7 @@ func (s *PgStorage) verifyIndex() error {
 			"%v.%v: multiple indexes found, expected two indexes",
 			s.schema, s.table,
 		)
-		return mend.Err(msg, true)
+		return util.Err(msg, true)
 	}
 
 	for rawName, pattern := range requiredIndexes {
@@ -520,7 +530,7 @@ func (s *PgStorage) verifyIndex() error {
 				"%v.%v: index_name %v not found",
 				s.schema, s.table, indexName,
 			)
-			return mend.Err(msg, true)
+			return util.Err(msg, true)
 		}
 
 		expectedDef := fmt.Sprintf(pattern, s.table, s.schema, s.table)
@@ -530,7 +540,7 @@ func (s *PgStorage) verifyIndex() error {
 				s.schema, s.table, indexName,
 				expectedDef, foundDef,
 			)
-			return mend.Err(msg, true)
+			return util.Err(msg, true)
 		}
 	}
 
@@ -546,16 +556,16 @@ func (s *PgStorage) RegisterJob(ctx context.Context, job *Job) error {
 	defer s.rollback(ctx, cancel, tx)
 
 	if job.Status != JSReady {
-		return mend.Err("job must be registered with 'ready' status", true)
+		return util.Err("job must be registered with 'ready' status", true)
 	}
 
 	if job.ProcessId == "" {
-		return mend.Err("process ID must not be empty!", true)
+		return util.Err("process ID must not be empty!", true)
 	}
 
 	if job.GoroutineLeaseExpireTs.IsZero() == false &&
 		job.GoroutineHeartBeatTs.Before(job.GoroutineLeaseExpireTs) == false {
-		return mend.Err("heartbeat ts >= leaseExpireTs", true)
+		return util.Err("heartbeat ts >= leaseExpireTs", true)
 	}
 
 	// language=sql
@@ -588,19 +598,19 @@ func (s *PgStorage) RegisterJob(ctx context.Context, job *Job) error {
 		ok := errors.As(err, &pgErr)
 		if ok && pgErr.Code == "23505" {
 			// The error code is duplicate key error. We've already verified that there's only 1 key in the table.
-			return mend.Wrap(JobIdAlreadyExist, true)
+			return util.WrapErr(JobIdAlreadyExist, true)
 		}
 
-		return mend.Wrap(err, true)
+		return util.WrapErr(err, true)
 	}
 
 	if res.RowsAffected() != int64(1) {
-		return mend.Err(fmt.Sprintf("rows affected is not 1: %v", res.RowsAffected()), true)
+		return util.Err(fmt.Sprintf("rows affected is not 1: %v", res.RowsAffected()), true)
 	}
 
 	err = tx.Commit(ctx)
 	if err != nil {
-		return mend.Wrap(err, true)
+		return util.WrapErr(err, true)
 	}
 
 	if s._mustSendTestLog {
@@ -659,7 +669,7 @@ func (s *PgStorage) GetOpenJobCandidates(
 		maxJobsToReturn,
 	)
 	if err != nil {
-		return nil, mend.Wrap(err, true)
+		return nil, util.WrapErr(err, true)
 	}
 
 	defer rows.Close()
@@ -669,14 +679,14 @@ func (s *PgStorage) GetOpenJobCandidates(
 		var jobId string
 		err = rows.Scan(&jobId)
 		if err != nil {
-			return nil, mend.Wrap(err, true)
+			return nil, util.WrapErr(err, true)
 		}
 
 		jobIds = append(jobIds, jobId)
 	}
 	err = rows.Err()
 	if err != nil {
-		return nil, mend.Wrap(err, true)
+		return nil, util.WrapErr(err, true)
 	}
 
 	return jobIds, nil
@@ -725,7 +735,7 @@ func (s *PgStorage) TryTakeOverJob(
 		// Reject if still leased.
 		if job.GoroutineLeaseExpireTs.After(now) ||
 			job.GoroutineLeaseExpireTs.Equal(now) {
-			return nil, mend.Wrap(AlreadyLeased, true)
+			return nil, util.WrapErr(AlreadyLeased, true)
 		}
 	}
 	prevGoroutineId := job.GoroutineId
@@ -761,12 +771,12 @@ func (s *PgStorage) TryTakeOverJob(
 		jobId,
 	)
 	if err != nil {
-		return nil, mend.Wrap(err, true)
+		return nil, util.WrapErr(err, true)
 	}
 
 	if res.RowsAffected() != int64(1) {
 		msg := fmt.Sprintf("exected 1 row to be updated, got %v", res.RowsAffected())
-		return nil, mend.Err(msg, true)
+		return nil, util.Err(msg, true)
 	}
 
 	// Get the latest data (the one we already updated).
@@ -818,7 +828,7 @@ func (s *PgStorage) SendHeartbeat(
 	// This can happen when time in some servers are out-of-sync, or an Executor runtime got stop-the-world for longer
 	// than ExecutionTimeout config.
 	if job.GoroutineId != goroutineId {
-		return mend.Wrap(AlreadyLeased, true)
+		return util.WrapErr(AlreadyLeased, true)
 	}
 
 	// Only allow to send heartbeat for ready status.
@@ -859,17 +869,17 @@ func (s *PgStorage) SendHeartbeat(
 		jobId,
 	)
 	if err != nil {
-		return mend.Wrap(err, true)
+		return util.WrapErr(err, true)
 	}
 
 	if res.RowsAffected() != int64(1) {
 		msg := fmt.Sprintf("exected 1 row to be updated, got %v", res.RowsAffected())
-		return mend.Err(msg, true)
+		return util.Err(msg, true)
 	}
 
 	err = tx.Commit(ctx)
 	if err != nil {
-		return mend.Wrap(err, true)
+		return util.WrapErr(err, true)
 	}
 
 	if s._mustSendTestLog {
@@ -915,7 +925,7 @@ func (s *PgStorage) UpdateJob(ctx context.Context, newMeta *Job, leaseExpireDura
 
 	// Only allow updating if executorId is still the same.
 	if current.GoroutineId != newMeta.GoroutineId {
-		return mend.Wrap(AlreadyLeased, true)
+		return util.WrapErr(AlreadyLeased, true)
 	}
 
 	err = s.validateStatusForUpdate(current)
@@ -956,17 +966,17 @@ func (s *PgStorage) UpdateJob(ctx context.Context, newMeta *Job, leaseExpireDura
 		jobId,
 	)
 	if err != nil {
-		return mend.Wrap(err, true)
+		return util.WrapErr(err, true)
 	}
 
 	if res.RowsAffected() != int64(1) {
 		msg := fmt.Sprintf("exected 1 row to be updated, got %v", res.RowsAffected())
-		return mend.Err(msg, true)
+		return util.Err(msg, true)
 	}
 
 	err = tx.Commit(ctx)
 	if err != nil {
-		return mend.Wrap(err, true)
+		return util.WrapErr(err, true)
 	}
 
 	if s._mustSendTestLog {
@@ -1008,15 +1018,15 @@ func (s *PgStorage) UpdateJob(ctx context.Context, newMeta *Job, leaseExpireDura
 func (s *PgStorage) validateStatusForUpdate(job *Job) error {
 	// Only allow to send heartbeat for ready status.
 	if job.Status == JSDone {
-		return mend.Wrap(AlreadyDone, true)
+		return util.WrapErr(AlreadyDone, true)
 	}
 	if job.Status == JSError {
-		return mend.Wrap(AlreadyError, true)
+		return util.WrapErr(AlreadyError, true)
 	}
 	if job.Status != JSReady {
 		// Defensive coding. Should not happen.
 		msg := fmt.Sprintf("expected job status 'ready', got %v instead, job id: %v", job.Status, job.JobId)
-		return mend.Err(msg, true)
+		return util.Err(msg, true)
 	}
 
 	return nil
@@ -1072,7 +1082,7 @@ func (s *PgStorage) getJobImpl(ctx context.Context, tx pgx.Tx, jobId string, loc
 		&startedTs, &endTs, &m.LastUpdateTs,
 	)
 	if err != nil {
-		return nil, mend.Wrap(err, true)
+		return nil, util.WrapErr(err, true)
 	}
 
 	m.GoroutineHeartBeatTs = heartbeatTs.Time

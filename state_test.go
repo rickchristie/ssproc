@@ -4,23 +4,21 @@ import (
 	"errors"
 	"fmt"
 	"github.com/jackc/pgx/v5"
+	"github.com/rickchristie/ssproc/pg"
+	"github.com/rickchristie/ssproc/pgtest"
+	"github.com/rickchristie/ssproc/plugs"
+	"github.com/rickchristie/ssproc/util"
 	"github.com/stretchr/testify/assert"
-	"rukita.co/main/be/accessor/db/pg"
-	"rukita.co/main/be/accessor/db/pg/pgtest"
-	"rukita.co/main/be/lib/mend"
-	"rukita.co/main/be/lib/test"
-	"rukita.co/main/be/lib/tr"
 	"testing"
+	"time"
 )
 
 const (
 	// TestLeak should be set to true and run manually each time we modify ssproc, this makes sure our modifications
 	// doesn't introduce goroutine leaks. This is important, it really helps us catch leaks. Previously there was
 	// a bug where when there's an error, context/connection was not cancelled, this helps us catch it.
-	TestLeak = false
+	TestLeak = true
 )
-
-var _ test.State = (*State)(nil)
 
 type State struct {
 	Db      *pgtest.Suite
@@ -48,9 +46,9 @@ func (s *State) TearDown(t *testing.T) {
 func (s *State) NewTx(t *testing.T, name string) *pg.ConnTxHelper {
 	tx, err := pg.NewConnTxHelper(
 		s.h.Ctx,
-		&tr.Trace{TraceId: name},
+		name,
 		s.Db.ConnString,
-		mend.NewZerologLogger(name),
+		plugs.DefaultLogger(name),
 		false,
 	)
 	assert.Nil(t, err)
@@ -60,7 +58,9 @@ func (s *State) NewTx(t *testing.T, name string) *pg.ConnTxHelper {
 
 func (s *State) InitPgStorage(t *testing.T, schema, table string) *PgStorage {
 	s.InitValidDb(t, schema, table)
-	ret, err := NewPgStorage(s.Db.ConnString, schema, table)
+	logger := plugs.DefaultLogger("State.PgStorage")
+	utilTime := util.NewGlobalTime(time.Local)
+	ret, err := NewPgStorage(s.Db.ConnString, schema, table, logger, utilTime)
 	assert.Nil(t, err)
 	return ret
 }
@@ -111,6 +111,6 @@ func (s *State) InitValidDb(t *testing.T, schema, table string) {
 	assert.Nil(t, err)
 }
 
-func StateCreator() test.State {
+func StateCreator() *State {
 	return &State{}
 }

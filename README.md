@@ -1,0 +1,4 @@
+# `ssproc`
+
+TODO: Write documentation.
+
