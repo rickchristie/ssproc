@@ -1,0 +1,19 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build Test Infrastructure",
+			"type": "shell",
+			"command": "cd ${workspaceFolder}/pgtest && ./test-infra-build.sh",
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Run Test Infrastructure",
+			"type": "shell",
+			"command": "cd ${workspaceFolder}/pgtest && ./test-infra-run.sh",
+			"problemMatcher": [],
+			"isBackground": true
+		}
+	]
+}

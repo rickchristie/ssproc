@@ -1,0 +1,40 @@
+{
+  "go.lintTool": "golangci-lint-v2",
+  "go.lintFlags": [
+    //"--fast", // Optional: makes it run faster by not running all linters
+    "--enable=errcheck" // Ensure errcheck is enabled (it usually is by default in golangci-lint)
+  ],
+  "[go]": {
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "always",
+    },
+    "editor.rulers": [120],
+    "editor.formatOnSave": true
+  },
+  "go.testTimeout": "5m",
+  "go.testFlags": [
+    "-v",
+    "-p=8"
+  ],
+  "go.lintOnSave": "workspace",
+  "go.useLanguageServer": true,
+  "go.diagnostic.vulncheck": "Imports",
+  "editor.inlayHints.enabled": "on",
+  "go.inlayHints.assignVariableTypes": false,
+  "go.inlayHints.compositeLiteralFields": true,
+  "go.inlayHints.compositeLiteralTypes": true,
+  "go.inlayHints.constantValues": true,
+  "go.inlayHints.functionTypeParameters": true,
+  "go.inlayHints.parameterNames": true,
+  "go.inlayHints.rangeVariableTypes": true,
+  "go.enableCodeLens": {
+    "runtest": true
+  },
+  "editor.codeLens": true,
+
+  "go.testExplorer.enable": true,
+  "testing.automaticallyOpenPeekView": "failureInVisibleDocument",
+  "testing.followRunningTest": true,
+  "testing.gutterEnabled": true,
+  "testing.showAllMessages": true
+}
