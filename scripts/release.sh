@@ -306,9 +306,69 @@ $(printf -- '- %s\n' "${DEV_FILES[@]}")"
 tag_release() {
     print_header "Tag Release"
 
-    TAG_MSG="v$VERSION"
+    # Default tag message
+    local default_msg="v$VERSION"
 
-    run_command "git tag -a v$VERSION -m \"$TAG_MSG\"" "Create annotated tag v$VERSION"
+    echo "Tag message preview:"
+    echo ""
+    echo -e "${CYAN}────────────────────────────────────────${NC}"
+    echo "$default_msg"
+    echo -e "${CYAN}────────────────────────────────────────${NC}"
+    echo ""
+
+    local response
+    read -p "$(echo -e "${BOLD}Edit tag message?${NC} [y/N]: ")" response
+
+    case "$response" in
+        [yY][eE][sS]|[yY])
+            echo ""
+            echo "Enter new tag message (press Enter for multi-line, Ctrl+D when done):"
+            echo -e "${YELLOW}Tip: For single line, just type and press Enter twice${NC}"
+            echo ""
+
+            # Read multi-line input
+            TAG_MSG=""
+            local first_line=true
+            while IFS= read -r line; do
+                if $first_line && [[ -z "$line" ]]; then
+                    # Empty first line means user wants to keep default
+                    TAG_MSG="$default_msg"
+                    break
+                fi
+                first_line=false
+                if [[ -z "$TAG_MSG" ]]; then
+                    TAG_MSG="$line"
+                else
+                    TAG_MSG+=$'\n'"$line"
+                fi
+            done
+
+            if [[ -z "$TAG_MSG" ]]; then
+                TAG_MSG="$default_msg"
+            fi
+
+            echo ""
+            echo "Final tag message:"
+            echo -e "${CYAN}────────────────────────────────────────${NC}"
+            echo "$TAG_MSG"
+            echo -e "${CYAN}────────────────────────────────────────${NC}"
+            ;;
+        *)
+            TAG_MSG="$default_msg"
+            ;;
+    esac
+
+    echo ""
+    print_step "Create annotated tag v$VERSION"
+    print_command "git tag -a v$VERSION -m \"...\""
+
+    if confirm "Create this tag?"; then
+        git tag -a "v$VERSION" -m "$TAG_MSG"
+        print_success "Created tag v$VERSION"
+    else
+        print_warning "Skipped tag creation"
+        return 1
+    fi
 }
 
 # =============================================================================
