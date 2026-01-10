@@ -2,20 +2,6 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "Build Test Infrastructure",
-			"type": "shell",
-			"command": "cd ${workspaceFolder}/pgtest && ./test-infra-build.sh",
-			"problemMatcher": [],
-			"group": "build"
-		},
-		{
-			"label": "Run Test Infrastructure",
-			"type": "shell",
-			"command": "cd ${workspaceFolder}/pgtest && ./test-infra-run.sh",
-			"problemMatcher": [],
-			"isBackground": true
-		},
-		{
 			"label": "Build Package",
 			"type": "shell",
 			"command": "go test -v -c -o /dev/null ./...",
@@ -26,11 +12,27 @@
 			}
 		},
 		{
-			"label": "pgflock up",
+			"label": "pgflock: up",
 			"type": "shell",
 			"command": "pgflock up",
 			"problemMatcher": [],
-			"isBackground": true
+			"isBackground": true,
+			"group": "test",
+			"presentation": {
+				"group": "test-infra",
+				"close": true
+			}
+		},
+		{
+			"label": "gowt: Run All Tests",
+			"type": "shell",
+			"command": "go clean -testcache && gowt ./...",
+			"problemMatcher": ["$go"],
+			"group": "test",
+			"presentation": {
+				"group": "test-infra",
+				"close": true
+			}
 		}
 	]
 }

@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	defaultPgflockPort = 9191
+	defaultPgflockPort = 5151
 	lockPassword       = "LegacyCodeIsOneWithNoTest"
 )
 

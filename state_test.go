@@ -21,7 +21,7 @@ type State struct {
 
 // Setup initializes the test state.
 func (s *State) Setup(t *testing.T) {
-	s.Db = testutil.NewPgTestSuite(9191)
+	s.Db = testutil.NewPgTestSuite(0)
 	s.Db.Setup(t)
 	s.Storage = s.InitPgStorage(t, "public", "ssproc_test_main")
 	s.h = &PgTestHelper{

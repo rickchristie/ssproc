@@ -1,4 +1,5 @@
-
-
 # Previously used IDEs.
 .idea/
+
+# Logs and temporary files created by pgflock.
+#.pgflock/up.log
