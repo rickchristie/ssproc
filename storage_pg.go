@@ -665,8 +665,9 @@ func (s *PgStorage) UpdateJob(ctx context.Context, newMeta *Job, leaseExpireDura
 			job_data = $1, status = $2, end_ts = $3,
 			goroutine_ids = $4, exec_count = $5, started_ts = $6,
 		    next_subprocess = $7, goroutine_heart_beat_ts = $8,
-		    goroutine_lease_expire_ts = $9, last_update_ts = $10
-		WHERE job_id = $11`,
+		    goroutine_lease_expire_ts = $9, last_update_ts = $10,
+		    run_type = $11, comp_count = $12
+		WHERE job_id = $13`,
 		s.schema, s.table,
 	)
 	now := s.utilTime.Now()
@@ -677,6 +678,7 @@ func (s *PgStorage) UpdateJob(ctx context.Context, newMeta *Job, leaseExpireDura
 		newMeta.GoroutineIds, newMeta.ExecCount, s.tsInput(newMeta.StartedTs),
 		newMeta.NextSubprocess, now,
 		leaseExpireTs, now,
+		newMeta.RunType, newMeta.CompCount,
 		jobId,
 	)
 	if err != nil {
@@ -697,8 +699,14 @@ func (s *PgStorage) UpdateJob(ctx context.Context, newMeta *Job, leaseExpireDura
 		if current.Status != newMeta.Status {
 			msg += fmt.Sprintf(" status(%v)", newMeta.Status)
 		}
+		if current.RunType != newMeta.RunType {
+			msg += fmt.Sprintf(" runType(%v)", newMeta.RunType)
+		}
 		if current.ExecCount != newMeta.ExecCount {
 			msg += fmt.Sprintf(" execCount(%v)", newMeta.ExecCount)
+		}
+		if current.CompCount != newMeta.CompCount {
+			msg += fmt.Sprintf(" compCount(%v)", newMeta.CompCount)
 		}
 		if current.NextSubprocess != newMeta.NextSubprocess {
 			msg += fmt.Sprintf(" next(%v)", newMeta.NextSubprocess)
@@ -727,6 +735,9 @@ func (s *PgStorage) validateStatusForUpdate(job *Job) error {
 	if job.Status == JSDone {
 		return interr.Wrap(AlreadyDone, true)
 	}
+	if job.Status == JSCompensated {
+		return interr.Wrap(AlreadyCompensated, true)
+	}
 	if job.Status == JSError {
 		return interr.Wrap(AlreadyError, true)
 	}
@@ -744,14 +755,15 @@ func (s *PgStorage) ClearDoneJobs(ctx context.Context, processId string, activeT
 	}
 	defer s.rollback(ctx, cancel, tx)
 
+	// Clear both done and compensated jobs
 	query := fmt.Sprintf(
 		`DELETE FROM %v.%v
 			WHERE job_id in(
-				SELECT job_id FROM %v.%v WHERE end_ts <= $1 AND process_id = $2 AND status=$3 ORDER BY end_ts ASC
-				LIMIT $4 FOR UPDATE SKIP LOCKED
+				SELECT job_id FROM %v.%v WHERE end_ts <= $1 AND process_id = $2 AND status IN ($3, $4) ORDER BY end_ts ASC
+				LIMIT $5 FOR UPDATE SKIP LOCKED
 			)`, s.schema, s.table, s.schema, s.table,
 	)
-	res, err := tx.Exec(ctx, query, activeThreshold, processId, JSDone, maxRowsToDelete)
+	res, err := tx.Exec(ctx, query, activeThreshold, processId, JSDone, JSCompensated, maxRowsToDelete)
 	if err != nil {
 		return 0, interr.Wrap(err, true)
 	}

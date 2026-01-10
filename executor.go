@@ -72,6 +72,10 @@ type ExecutorConfig struct {
 	// MaxCompensationCount is the amount of compensation retries. Defaults to 5.
 	MaxCompensationCount int
 
+	// RunCompensation enables compensation execution when max execution retries are exhausted
+	// or when SREarlyExitError is returned. Defaults to false for backward compatibility.
+	RunCompensation bool
+
 	// EnableCleanup enables automatic cleanup of successful jobs.
 	EnableCleanup bool
 
@@ -131,6 +135,13 @@ func NewExecutor[Data JobData](
 	if config.MaxExecutionCount == 0 {
 		config.MaxExecutionCount = 5
 	}
+	// Validate RunCompensation configuration BEFORE applying defaults
+	// This ensures MaxCompensationCount=0 with RunCompensation=true is caught
+	if config.RunCompensation && config.MaxCompensationCount == 0 {
+		return nil, interr.Err(fmt.Sprintf(
+			"MaxCompensationCount must be > 0 when RunCompensation is enabled",
+		), true)
+	}
 	if config.MaxCompensationCount == 0 {
 		config.MaxCompensationCount = 5
 	}
@@ -147,6 +158,24 @@ func NewExecutor[Data JobData](
 	processId := process.Id()
 	if processId == "" {
 		return nil, interr.Err("given process has empty process ID", true)
+	}
+
+	// Validate that at least one subprocess has compensation defined
+	if config.RunCompensation {
+		hasCompensation := false
+		subprocesses := process.GetSubprocesses()
+		for _, sp := range subprocesses {
+			if sp.Compensation != nil {
+				hasCompensation = true
+				break
+			}
+		}
+		if !hasCompensation {
+			return nil, interr.Err(fmt.Sprintf(
+				"process %v: RunCompensation is enabled but no subprocess has Compensation defined",
+				processId,
+			), true)
+		}
 	}
 
 	name := fmt.Sprintf("%v-%v", config.ExecutorName, process.Id())
@@ -343,6 +372,10 @@ func (s *Executor[Data]) execute(
 			s.logger.Warn(fmt.Sprintf("%v: Job %v is already done, cannot execute", s.serviceName, jobId))
 			return nil
 		}
+		if errors.Is(err, AlreadyCompensated) {
+			s.logger.Warn(fmt.Sprintf("%v: Job %v is already compensated, cannot execute", s.serviceName, jobId))
+			return nil
+		}
 		return err
 	}
 
@@ -357,22 +390,46 @@ func (s *Executor[Data]) execute(
 		return err
 	}
 
+	go s.pingHeartbeat(ctx, cancel, traceId, goroutineId, jobId)
+
+	// Route based on run type
+	if curJob.RunType == RTCompensation {
+		return s.executeCompensationMode(ctx, goroutineId, curJob, jobData)
+	}
+	return s.executeNormalMode(ctx, goroutineId, curJob, jobData)
+}
+
+func (s *Executor[Data]) executeNormalMode(
+	ctx context.Context,
+	goroutineId string,
+	curJob *Job,
+	jobData Data,
+) error {
+	// Check if max execution count reached
 	if curJob.ExecCount >= s.config.MaxExecutionCount {
-		err = s.updateJobError(ctx, curJob)
+		if s.config.RunCompensation {
+			// Transition to compensation mode
+			curJob.RunType = RTCompensation
+			err := s.storage.UpdateJob(ctx, curJob, s.config.LeaseExpireDuration)
+			if err != nil {
+				return err
+			}
+			return s.executeCompensationMode(ctx, goroutineId, curJob, jobData)
+		}
+		err := s.updateJobError(ctx, curJob)
 		if err != nil {
 			return err
 		}
 		return interr.Wrap(MarkedAsError, true)
 	}
 
-	go s.pingHeartbeat(ctx, cancel, traceId, goroutineId, jobId)
-
+	// Increment exec_count and update metadata
 	curJob.ExecCount++
 	if curJob.StartedTs.IsZero() {
 		curJob.StartedTs = s.timeUtil.Now()
 	}
 	curJob.GoroutineIds = append(curJob.GoroutineIds, goroutineId)
-	err = s.storage.UpdateJob(ctx, curJob, s.config.LeaseExpireDuration)
+	err := s.storage.UpdateJob(ctx, curJob, s.config.LeaseExpireDuration)
 	if err != nil {
 		return err
 	}
@@ -391,7 +448,7 @@ func (s *Executor[Data]) execute(
 
 		next := subprocesses[curJob.NextSubprocess]
 		cRet := make(chan *execResult, 1)
-		go s.executeSubprocess(ctx, goroutineId, curJob, jobData, next, cRet)
+		go s.executeSubprocess(ctx, goroutineId, curJob, jobData, next.Transaction, cRet)
 
 		var res *execResult
 		select {
@@ -402,7 +459,7 @@ func (s *Executor[Data]) execute(
 		close(cRet)
 
 		if res.panicErr != nil {
-			s.logger.Fatal(fmt.Sprintf("%v: Panic in subprocess execution of job %v!", s.serviceName, jobId),
+			s.logger.Error(fmt.Sprintf("%v: Panic in subprocess execution of job %v (recovered)", s.serviceName, curJob.JobId),
 				"error", res.panicErr.Error())
 			return interr.Wrap(SubprocessFailed, true).
 				Msg(fmt.Sprintf("subprocess %v failed: %v", curJob.NextSubprocess, res.panicErr.Error()))
@@ -416,11 +473,26 @@ func (s *Executor[Data]) execute(
 			curJob.NextSubprocess++
 			return s.updateJobDone(ctx, curJob)
 		case SREarlyExitError:
+			if s.config.RunCompensation {
+				// Transition to compensation mode
+				curJob.RunType = RTCompensation
+				err := s.storage.UpdateJob(ctx, curJob, s.config.LeaseExpireDuration)
+				if err != nil {
+					return err
+				}
+				return s.executeCompensationMode(ctx, goroutineId, curJob, jobData)
+			}
 			return s.updateJobError(ctx, curJob)
 		}
 
 		curJob.NextSubprocess++
 		err = s.storage.UpdateJob(ctx, curJob, s.config.LeaseExpireDuration)
+		if err != nil {
+			return err
+		}
+
+		// Re-deserialize jobData to get updates from this subprocess for next iteration
+		jobData, err = s.process.Deserialize(curJob.JobData)
 		if err != nil {
 			return err
 		}
@@ -436,6 +508,120 @@ func (s *Executor[Data]) execute(
 	return nil
 }
 
+func (s *Executor[Data]) executeCompensationMode(
+	ctx context.Context,
+	goroutineId string,
+	curJob *Job,
+	jobData Data,
+) error {
+	// Check if max compensation count reached
+	if curJob.CompCount >= s.config.MaxCompensationCount {
+		err := s.updateJobError(ctx, curJob)
+		if err != nil {
+			return err
+		}
+		return interr.Wrap(MarkedAsError, true).
+			Msg("max compensation count reached")
+	}
+
+	// Increment comp_count and update metadata
+	curJob.CompCount++
+	if curJob.StartedTs.IsZero() {
+		curJob.StartedTs = s.timeUtil.Now()
+	}
+	curJob.GoroutineIds = append(curJob.GoroutineIds, goroutineId)
+	err := s.storage.UpdateJob(ctx, curJob, s.config.LeaseExpireDuration)
+	if err != nil {
+		return err
+	}
+
+	subprocesses := s.process.GetSubprocesses()
+
+	// Run compensations backward
+	for {
+		// Terminal condition: all compensations done (next_subprocess < 0)
+		if curJob.NextSubprocess < 0 {
+			break
+		}
+
+		select {
+		case <-ctx.Done():
+			return interr.Wrap(ContextCanceled, true)
+		default:
+		}
+
+		// Validate subprocess index
+		if curJob.NextSubprocess >= len(subprocesses) {
+			// If next_subprocess is beyond the range, decrement until we find a valid one
+			curJob.NextSubprocess = len(subprocesses) - 1
+			err := s.storage.UpdateJob(ctx, curJob, s.config.LeaseExpireDuration)
+			if err != nil {
+				return err
+			}
+			continue
+		}
+
+		compensation := subprocesses[curJob.NextSubprocess].Compensation
+
+		// Skip if no compensation defined for this step
+		if compensation == nil {
+			curJob.NextSubprocess--
+			err := s.storage.UpdateJob(ctx, curJob, s.config.LeaseExpireDuration)
+			if err != nil {
+				return err
+			}
+			continue
+		}
+
+		// Execute compensation
+		cRet := make(chan *execResult, 1)
+		go s.executeSubprocess(ctx, goroutineId, curJob, jobData, compensation, cRet)
+
+		var res *execResult
+		select {
+		case <-ctx.Done():
+			return interr.Wrap(ContextCanceledOngoing, true)
+		case res = <-cRet:
+		}
+		close(cRet)
+
+		if res.panicErr != nil {
+			s.logger.Error(fmt.Sprintf("%v: Panic in compensation execution of job %v (recovered)", s.serviceName, curJob.JobId),
+				"error", res.panicErr.Error())
+			return interr.Wrap(CompensationFailed, true).
+				Msg(fmt.Sprintf("compensation %v failed: %v", curJob.NextSubprocess, res.panicErr.Error()))
+		}
+
+		switch res.result {
+		case SRFailed:
+			return interr.Wrap(CompensationFailed, true).
+				Msg(fmt.Sprintf("compensation %v failed!", curJob.NextSubprocess))
+		case SREarlyExitDone:
+			// Mark as compensated and skip remaining compensations
+			return s.updateJobCompensated(ctx, curJob)
+		case SREarlyExitError:
+			// Mark as error and skip remaining compensations
+			return s.updateJobError(ctx, curJob)
+		case SRSuccess:
+			// Move to next compensation (decrement index)
+			curJob.NextSubprocess--
+			err := s.storage.UpdateJob(ctx, curJob, s.config.LeaseExpireDuration)
+			if err != nil {
+				return err
+			}
+
+			// Re-deserialize jobData to get updates from this compensation for next iteration
+			jobData, err = s.process.Deserialize(curJob.JobData)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// All compensations done
+	return s.updateJobCompensated(ctx, curJob)
+}
+
 type execResult struct {
 	result   SubprocessResult
 	panicErr error
@@ -446,7 +632,7 @@ func (s *Executor[Data]) executeSubprocess(
 	goroutineId string,
 	curJob *Job,
 	jobData Data,
-	next *Subprocess[Data],
+	executeFn Execute[Data],
 	cRet chan<- *execResult,
 ) {
 	defer func() {
@@ -459,7 +645,7 @@ func (s *Executor[Data]) executeSubprocess(
 		}
 	}()
 
-	result := next.Transaction(ctx, goroutineId, jobData, func(jobData Data) error {
+	result := executeFn(ctx, goroutineId, jobData, func(jobData Data) error {
 		serialized, err := s.process.Serialize(jobData)
 		if err != nil {
 			return err
@@ -504,7 +690,8 @@ func (s *Executor[Data]) pingHeartbeat(
 
 				if errors.Is(err, AlreadyLeased) ||
 					errors.Is(err, AlreadyError) ||
-					errors.Is(err, AlreadyDone) {
+					errors.Is(err, AlreadyDone) ||
+					errors.Is(err, AlreadyCompensated) {
 					return
 				}
 
@@ -537,6 +724,13 @@ func (s *Executor[Data]) updateJobError(ctx context.Context, curJob *Job) error 
 
 func (s *Executor[Data]) updateJobDone(ctx context.Context, curJob *Job) error {
 	curJob.Status = JSDone
+	curJob.EndTs = s.timeUtil.Now()
+	return s.storage.UpdateJob(ctx, curJob, s.config.LeaseExpireDuration)
+}
+
+func (s *Executor[Data]) updateJobCompensated(ctx context.Context, curJob *Job) error {
+	curJob.Status = JSCompensated
+	curJob.NextSubprocess = -1 // Terminal value for compensated jobs
 	curJob.EndTs = s.timeUtil.Now()
 	return s.storage.UpdateJob(ctx, curJob, s.config.LeaseExpireDuration)
 }

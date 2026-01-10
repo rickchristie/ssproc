@@ -245,3 +245,211 @@ func CreateJobUpdaterForTest[D JobData](
 		return storage.UpdateJob(ctx, job, executor.config.LeaseExpireDuration)
 	}
 }
+
+// TestJobRow represents a job row for test fixtures.
+type TestJobRow struct {
+	Id        string
+	Data      string
+	ProcessId string
+
+	// These fields are optional and has defaults.
+	GoroutineId            string
+	GoroutineHeartBeatTs   time.Time
+	GoroutineLeaseExpireTs time.Time
+	Status                 JobStatus
+	NextSubprocess         int
+	RunType                RunType
+	ExecCount              int
+	StartAfterTs           time.Time
+	CreatedTs              time.Time
+	StartedTs              time.Time
+	EndTs                  time.Time
+	LastUpdateTs           time.Time
+}
+
+// TestJobRows inserts test job rows and returns a map of job ID to Job.
+func (h *PgTestHelper) TestJobRows(t *testing.T, rows []*TestJobRow) map[string]*Job {
+	for _, r := range rows {
+		if r.Status == "" {
+			r.Status = JSReady
+		}
+		if r.RunType == "" {
+			r.RunType = RTNormal
+		}
+		if r.CreatedTs.IsZero() {
+			r.CreatedTs = time.Now()
+		}
+		if r.LastUpdateTs.IsZero() {
+			r.LastUpdateTs = time.Now()
+		}
+		if r.StartAfterTs.IsZero() {
+			r.StartAfterTs = time.Now()
+		}
+	}
+
+	tx, ctx, cancel, err := h.PgStorage.beginTx(h.Ctx)
+	assert.Nil(t, err)
+	defer h.PgStorage.rollback(ctx, cancel, tx)
+
+	ret := make(map[string]*Job)
+	for _, r := range rows {
+		query := fmt.Sprintf(
+			`INSERT INTO
+					%v.%v (
+						job_id, job_data, process_id, goroutine_id, goroutine_heart_beat_ts, status,
+						next_subprocess, run_type, exec_count, created_ts, started_ts,
+						end_ts, last_update_ts, goroutine_lease_expire_ts, start_after_ts
+					)
+					VALUES (
+						$1, $2, $3, $4, $5,
+						$6, $7, $8, $9, $10,
+						$11, $12, $13, $14, $15
+					)`,
+			h.PgStorage.schema,
+			h.PgStorage.table,
+		)
+		_, err := tx.Exec(
+			h.Ctx, query,
+
+			r.Id, r.Data, r.ProcessId, r.GoroutineId, h.PgStorage.tsInput(r.GoroutineHeartBeatTs), r.Status,
+			r.NextSubprocess, r.RunType, r.ExecCount, h.PgStorage.tsInput(r.CreatedTs), h.PgStorage.tsInput(r.StartedTs),
+			h.PgStorage.tsInput(r.EndTs), h.PgStorage.tsInput(r.LastUpdateTs),
+			h.PgStorage.tsInput(r.GoroutineLeaseExpireTs), h.PgStorage.tsInput(r.StartAfterTs),
+		)
+		assert.Nil(t, err)
+
+		job, err := h.PgStorage.getJobImpl(h.Ctx, tx, r.Id, false)
+		assert.Nil(t, err)
+
+		ret[r.Id] = job
+	}
+
+	err = tx.Commit(h.Ctx)
+	assert.Nil(t, err)
+
+	return ret
+}
+
+func assertJobDone[Data JobData](
+	t *testing.T,
+	h *PgTestHelper,
+	process Process[Data],
+	jobData Data,
+	execCount int,
+	nextSubprocess int,
+	regTime time.Time,
+) {
+	found, _ := h.GetJob(t, jobData.GetJobId())
+	assert.Equal(t, jobData.GetJobId(), found.JobId)
+	assert.Equal(t, JSDone, found.Status)
+	assert.NotEmpty(t, found.GoroutineId)
+	assert.Equal(t, nextSubprocess, found.NextSubprocess)
+	assert.Equal(t, execCount, found.ExecCount)
+
+	assert.Equal(t, RTNormal, found.RunType)
+	assert.NotEmpty(t, found.GoroutineIds)
+
+	assert.Equal(t, true, found.GoroutineHeartBeatTs.UnixMicro() >= regTime.UnixMicro())
+	assert.Equal(t, true, found.CreatedTs.UnixMicro() >= regTime.UnixMicro())
+	assert.Equal(t, true, found.StartedTs.UnixMicro() >= regTime.UnixMicro())
+	assert.Equal(t, true, found.StartAfterTs.UnixMicro() >= regTime.UnixMicro())
+	assert.Equal(t, true, found.EndTs.UnixMicro() >= regTime.UnixMicro())
+	assert.Equal(t, true, found.LastUpdateTs.UnixMicro() >= regTime.UnixMicro())
+
+	foundJobData, err := process.Deserialize(found.JobData)
+	assert.Nil(t, err)
+	assert.Equal(t, jobData, foundJobData)
+}
+
+func assertJobNotTakenOver[Data JobData](
+	t *testing.T,
+	h *PgTestHelper,
+	process Process[Data],
+	jobData Data,
+	regTime time.Time,
+) {
+	found, _ := h.GetJob(t, jobData.GetJobId())
+	assert.Equal(t, jobData.GetJobId(), found.JobId)
+	assert.Equal(t, JSReady, found.Status)
+	assert.Empty(t, found.GoroutineId)
+	assert.Equal(t, 0, found.NextSubprocess)
+	assert.Equal(t, 0, found.ExecCount)
+
+	assert.Equal(t, RTNormal, found.RunType)
+	assert.Empty(t, found.GoroutineIds)
+
+	assert.Equal(t, true, found.CreatedTs.UnixMicro() >= regTime.UnixMicro())
+	assert.Equal(t, true, found.StartAfterTs.UnixMicro() >= regTime.UnixMicro())
+	assert.Equal(t, true, found.LastUpdateTs.UnixMicro() >= regTime.UnixMicro())
+
+	assert.Equal(t, true, found.GoroutineHeartBeatTs.IsZero())
+	assert.Equal(t, true, found.StartedTs.IsZero())
+	assert.Equal(t, true, found.EndTs.IsZero())
+
+	foundJobData, err := process.Deserialize(found.JobData)
+	assert.Nil(t, err)
+	assert.Equal(t, jobData, foundJobData)
+}
+
+func assertJobError[Data JobData](
+	t *testing.T,
+	h *PgTestHelper,
+	process Process[Data],
+	jobData Data,
+	execCount int,
+	nextSubprocess int,
+	regTime time.Time,
+) {
+	found, _ := h.GetJob(t, jobData.GetJobId())
+	assert.Equal(t, jobData.GetJobId(), found.JobId)
+	assert.Equal(t, JSError, found.Status)
+	assert.NotEmpty(t, found.GoroutineId)
+	assert.Equal(t, nextSubprocess, found.NextSubprocess)
+	assert.Equal(t, execCount, found.ExecCount)
+
+	assert.Equal(t, true, found.GoroutineHeartBeatTs.UnixMicro() >= regTime.UnixMicro())
+	assert.Equal(t, true, found.CreatedTs.UnixMicro() >= regTime.UnixMicro())
+	assert.Equal(t, true, found.StartedTs.UnixMicro() >= regTime.UnixMicro())
+	assert.Equal(t, true, found.StartAfterTs.UnixMicro() >= regTime.UnixMicro())
+	assert.Equal(t, true, found.EndTs.UnixMicro() >= regTime.UnixMicro())
+	assert.Equal(t, true, found.LastUpdateTs.UnixMicro() >= regTime.UnixMicro())
+
+	foundJobData, err := process.Deserialize(found.JobData)
+	assert.Nil(t, err)
+	assert.Equal(t, jobData, foundJobData)
+}
+
+func assertJobFailExec[Data JobData](
+	t *testing.T,
+	h *PgTestHelper,
+	process Process[Data],
+	jobData Data,
+	execCount int,
+	nextSubprocess int,
+	regTime time.Time,
+) {
+	found, _ := h.GetJob(t, jobData.GetJobId())
+	assert.Equal(t, jobData.GetJobId(), found.JobId)
+	assert.Equal(t, JSReady, found.Status)
+	assert.NotEmpty(t, found.GoroutineId)
+	assert.Equal(t, nextSubprocess, found.NextSubprocess)
+	assert.Equal(t, execCount, found.ExecCount)
+
+	assert.Equal(t, true, found.GoroutineHeartBeatTs.UnixMicro() >= regTime.UnixMicro())
+	assert.Equal(t, true, found.CreatedTs.UnixMicro() >= regTime.UnixMicro())
+	assert.Equal(t, true, found.StartedTs.UnixMicro() >= regTime.UnixMicro())
+	assert.Equal(t, true, found.StartAfterTs.UnixMicro() >= regTime.UnixMicro())
+	assert.Equal(t, true, found.EndTs.IsZero())
+	assert.Equal(t, true, found.LastUpdateTs.UnixMicro() >= regTime.UnixMicro())
+
+	foundJobData, err := process.Deserialize(found.JobData)
+	assert.Nil(t, err)
+	assert.Equal(t, jobData, foundJobData)
+}
+
+func assertJobDataIsLatest[Data JobData](t *testing.T, h *PgTestHelper, process Process[Data], jobData Data) {
+	found, _ := h.GetJob(t, jobData.GetJobId())
+	foundJobData, err := process.Deserialize(found.JobData)
+	assert.Nil(t, err)
+	assert.Equal(t, jobData, foundJobData)
+}

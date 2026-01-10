@@ -63,4 +63,9 @@ type Execute[Data JobData] func(
 type Subprocess[Data JobData] struct {
 	// Transaction is the main execution function for this subprocess.
 	Transaction Execute[Data]
+
+	// Compensation is the rollback function for this subprocess.
+	// If nil, the subprocess is skipped during compensation execution.
+	// Compensation functions must be idempotent.
+	Compensation Execute[Data]
 }
