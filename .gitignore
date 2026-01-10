@@ -2,4 +2,4 @@
 .idea/
 
 # Logs and temporary files created by pgflock.
-#.pgflock/up.log
+.pgflock/up.log
