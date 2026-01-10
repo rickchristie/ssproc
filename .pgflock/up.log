@@ -1,0 +1,333 @@
+{"level":"info","port":9090,"container":"rukita-pgflock-9090","time":"2026-01-10T15:46:29+07:00","message":"WaitForPostgresOnPort: starting"}
+{"level":"debug","port":9090,"attempt":1,"time":"2026-01-10T15:46:29+07:00","message":"waitForPostgresLogs: init not complete yet"}
+{"level":"debug","port":9090,"attempt":2,"time":"2026-01-10T15:46:29+07:00","message":"waitForPostgresLogs: init not complete yet"}
+{"level":"debug","port":9090,"attempt":3,"time":"2026-01-10T15:46:30+07:00","message":"waitForPostgresLogs: init not complete yet"}
+{"level":"debug","port":9090,"attempt":4,"time":"2026-01-10T15:46:30+07:00","message":"waitForPostgresLogs: init not complete yet"}
+{"level":"debug","port":9090,"attempt":5,"time":"2026-01-10T15:46:31+07:00","message":"waitForPostgresLogs: init not complete yet"}
+{"level":"debug","port":9090,"attempt":6,"time":"2026-01-10T15:46:31+07:00","message":"waitForPostgresLogs: waiting for ready after init..."}
+{"level":"debug","port":9090,"attempts":7,"time":"2026-01-10T15:46:32+07:00","message":"waitForPostgresLogs: found ready message after init"}
+{"level":"info","port":9090,"time":"2026-01-10T15:46:32+07:00","message":"WaitForPostgresOnPort: ready"}
+{"level":"info","port":9091,"container":"rukita-pgflock-9091","time":"2026-01-10T15:46:32+07:00","message":"WaitForPostgresOnPort: starting"}
+{"level":"debug","port":9091,"attempts":1,"time":"2026-01-10T15:46:32+07:00","message":"waitForPostgresLogs: found ready message after init"}
+{"level":"info","port":9091,"time":"2026-01-10T15:46:32+07:00","message":"WaitForPostgresOnPort: ready"}
+{"level":"info","addr":":9191","time":"2026-01-10T15:46:32+07:00","message":"Starting locker server"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:20:33+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester1","port":"9090","time":"2026-01-10T16:20:33+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester1","time":"2026-01-10T16:20:33+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester1","marker":"internal/testutil/TestExecutor_SingleJob","time":"2026-01-10T16:20:33+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:20:33+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester1","marker":"internal/testutil/TestExecutor_SingleJob","time":"2026-01-10T16:20:33+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:20:33+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester3","port":"9090","time":"2026-01-10T16:20:33+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester3","time":"2026-01-10T16:20:33+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester3","marker":"internal/testutil/TestExecutor_MultipleJobs","time":"2026-01-10T16:20:33+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:21:04+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester3","marker":"internal/testutil/TestExecutor_MultipleJobs","time":"2026-01-10T16:21:04+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:21:04+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester5","port":"9090","time":"2026-01-10T16:21:04+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester5","time":"2026-01-10T16:21:04+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester5","marker":"internal/testutil/TestExecutor_ExecuteNow","time":"2026-01-10T16:21:04+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:21:04+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester5","marker":"internal/testutil/TestExecutor_ExecuteNow","time":"2026-01-10T16:21:04+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:21:04+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester7","port":"9090","time":"2026-01-10T16:21:04+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester7","time":"2026-01-10T16:21:04+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester7","marker":"internal/testutil/TestClient_Register","time":"2026-01-10T16:21:04+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:21:04+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester7","marker":"internal/testutil/TestClient_Register","time":"2026-01-10T16:21:04+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:21:04+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester9","port":"9090","time":"2026-01-10T16:21:04+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester9","time":"2026-01-10T16:21:04+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester9","marker":"internal/testutil/TestClient_RegisterStartAfter","time":"2026-01-10T16:21:04+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:21:04+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester9","marker":"internal/testutil/TestClient_RegisterStartAfter","time":"2026-01-10T16:21:04+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:21:04+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester3","port":"9091","time":"2026-01-10T16:21:04+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester3","time":"2026-01-10T16:21:04+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester3","marker":"internal/testutil/TestExecutor_Cleanup","time":"2026-01-10T16:21:04+07:00","message":"LOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:22:05+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester6","port":"9090","time":"2026-01-10T16:22:05+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester6","time":"2026-01-10T16:22:05+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester6","marker":"internal/testutil/TestExecutor_SingleJob","time":"2026-01-10T16:22:05+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:22:05+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester6","marker":"internal/testutil/TestExecutor_SingleJob","time":"2026-01-10T16:22:05+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:22:05+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester5","port":"9091","time":"2026-01-10T16:22:05+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester5","time":"2026-01-10T16:22:05+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester5","marker":"internal/testutil/TestExecutor_MultipleJobs","time":"2026-01-10T16:22:05+07:00","message":"LOCK"}
+{"level":"debug","path":"/restart","method":"GET","time":"2026-01-10T16:22:19+07:00","message":"Request received"}
+{"level":"debug","path":"/api/restart","method":"POST","time":"2026-01-10T16:22:19+07:00","message":"Request received"}
+{"level":"debug","path":"/restart","method":"GET","time":"2026-01-10T16:22:30+07:00","message":"Request received"}
+{"level":"debug","path":"/status","method":"GET","time":"2026-01-10T16:22:35+07:00","message":"Request received"}
+{"level":"debug","path":"/","method":"GET","time":"2026-01-10T16:22:40+07:00","message":"Request received"}
+{"level":"info","count":2,"time":"2026-01-10T16:25:50+07:00","message":"UNLOCK-ALL"}
+{"level":"info","port":9090,"container":"rukita-pgflock-9090","time":"2026-01-10T16:25:50+07:00","message":"WaitForPostgresOnPort: starting"}
+{"level":"debug","port":9090,"attempt":1,"time":"2026-01-10T16:25:50+07:00","message":"waitForPostgresLogs: init not complete yet"}
+{"level":"debug","port":9090,"attempt":2,"time":"2026-01-10T16:25:50+07:00","message":"waitForPostgresLogs: init not complete yet"}
+{"level":"debug","port":9090,"attempt":3,"time":"2026-01-10T16:25:51+07:00","message":"waitForPostgresLogs: init not complete yet"}
+{"level":"debug","port":9090,"attempt":4,"time":"2026-01-10T16:25:51+07:00","message":"waitForPostgresLogs: init not complete yet"}
+{"level":"debug","port":9090,"attempt":5,"time":"2026-01-10T16:25:52+07:00","message":"waitForPostgresLogs: init not complete yet"}
+{"level":"debug","port":9090,"attempt":6,"time":"2026-01-10T16:25:52+07:00","message":"waitForPostgresLogs: waiting for ready after init..."}
+{"level":"debug","port":9090,"attempts":7,"time":"2026-01-10T16:25:53+07:00","message":"waitForPostgresLogs: found ready message after init"}
+{"level":"info","port":9090,"time":"2026-01-10T16:25:53+07:00","message":"WaitForPostgresOnPort: ready"}
+{"level":"info","port":9091,"container":"rukita-pgflock-9091","time":"2026-01-10T16:25:53+07:00","message":"WaitForPostgresOnPort: starting"}
+{"level":"debug","port":9091,"attempts":1,"time":"2026-01-10T16:25:53+07:00","message":"waitForPostgresLogs: found ready message after init"}
+{"level":"info","port":9091,"time":"2026-01-10T16:25:53+07:00","message":"WaitForPostgresOnPort: ready"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:34:59+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester8","port":"9091","time":"2026-01-10T16:34:59+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester8","time":"2026-01-10T16:34:59+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester8","marker":"test_manual","time":"2026-01-10T16:34:59+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:35:04+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester8","marker":"test_manual","time":"2026-01-10T16:35:04+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:35:09+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester9","port":"9091","time":"2026-01-10T16:35:09+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester9","time":"2026-01-10T16:35:09+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester9","marker":"internal/testutil/TestExecutor_SingleJob","time":"2026-01-10T16:35:09+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:35:10+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester9","marker":"internal/testutil/TestExecutor_SingleJob","time":"2026-01-10T16:35:10+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:35:10+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester4","port":"9090","time":"2026-01-10T16:35:10+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester4","time":"2026-01-10T16:35:10+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester4","marker":"internal/testutil/TestExecutor_MultipleJobs","time":"2026-01-10T16:35:10+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:35:40+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester4","marker":"internal/testutil/TestExecutor_MultipleJobs","time":"2026-01-10T16:35:40+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:35:40+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester8","port":"9090","time":"2026-01-10T16:35:40+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester8","time":"2026-01-10T16:35:40+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester8","marker":"internal/testutil/TestExecutor_ExecuteNow","time":"2026-01-10T16:35:40+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:35:40+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester8","marker":"internal/testutil/TestExecutor_ExecuteNow","time":"2026-01-10T16:35:40+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:35:40+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester10","port":"9090","time":"2026-01-10T16:35:40+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester10","time":"2026-01-10T16:35:41+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester10","marker":"internal/testutil/TestClient_Register","time":"2026-01-10T16:35:41+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:35:41+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester10","marker":"internal/testutil/TestClient_Register","time":"2026-01-10T16:35:41+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:35:41+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester2","port":"9091","time":"2026-01-10T16:35:41+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester2","time":"2026-01-10T16:35:41+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester2","marker":"internal/testutil/TestClient_RegisterStartAfter","time":"2026-01-10T16:35:41+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:35:41+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester2","marker":"internal/testutil/TestClient_RegisterStartAfter","time":"2026-01-10T16:35:41+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:35:41+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester2","port":"9090","time":"2026-01-10T16:35:41+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester2","time":"2026-01-10T16:35:41+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester2","marker":"internal/testutil/TestExecutor_Cleanup","time":"2026-01-10T16:35:41+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:36:03+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester2","marker":"internal/testutil/TestExecutor_Cleanup","time":"2026-01-10T16:36:03+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:36:03+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester1","port":"9091","time":"2026-01-10T16:36:03+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester1","time":"2026-01-10T16:36:03+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester1","marker":"internal/testutil/TestPgStorage_RegisterJob","time":"2026-01-10T16:36:03+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:36:03+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester1","marker":"internal/testutil/TestPgStorage_RegisterJob","time":"2026-01-10T16:36:03+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:36:03+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester4","port":"9091","time":"2026-01-10T16:36:03+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester4","time":"2026-01-10T16:36:03+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester4","marker":"internal/testutil/TestPgStorage_RegisterJob_DuplicateError","time":"2026-01-10T16:36:03+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:36:03+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester4","marker":"internal/testutil/TestPgStorage_RegisterJob_DuplicateError","time":"2026-01-10T16:36:03+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:36:03+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester6","port":"9091","time":"2026-01-10T16:36:03+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester6","time":"2026-01-10T16:36:03+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester6","marker":"internal/testutil/TestPgStorage_GetOpenJobCandidates","time":"2026-01-10T16:36:03+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:36:03+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester6","marker":"internal/testutil/TestPgStorage_GetOpenJobCandidates","time":"2026-01-10T16:36:03+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:36:03+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester7","port":"9091","time":"2026-01-10T16:36:03+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester7","time":"2026-01-10T16:36:04+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester7","marker":"internal/testutil/TestPgStorage_TryTakeOverJob","time":"2026-01-10T16:36:04+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:36:04+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester7","marker":"internal/testutil/TestPgStorage_TryTakeOverJob","time":"2026-01-10T16:36:04+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:36:04+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester10","port":"9091","time":"2026-01-10T16:36:04+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester10","time":"2026-01-10T16:36:04+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester10","marker":"internal/testutil/TestPgStorage_SendHeartbeat","time":"2026-01-10T16:36:04+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:36:04+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester10","marker":"internal/testutil/TestPgStorage_SendHeartbeat","time":"2026-01-10T16:36:04+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:36:04+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester1","port":"9090","time":"2026-01-10T16:36:04+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester1","time":"2026-01-10T16:36:04+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester1","marker":"internal/testutil/TestPgStorage_UpdateJob","time":"2026-01-10T16:36:04+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:36:04+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester1","marker":"internal/testutil/TestPgStorage_UpdateJob","time":"2026-01-10T16:36:04+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:36:04+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester3","port":"9090","time":"2026-01-10T16:36:04+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester3","time":"2026-01-10T16:36:04+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester3","marker":"internal/testutil/TestPgStorage_ClearDoneJobs","time":"2026-01-10T16:36:04+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:36:04+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester3","marker":"internal/testutil/TestPgStorage_ClearDoneJobs","time":"2026-01-10T16:36:04+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:36:04+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester5","port":"9090","time":"2026-01-10T16:36:04+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester5","time":"2026-01-10T16:36:04+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester5","marker":"internal/testutil/TestPgStorage_FilterJobs","time":"2026-01-10T16:36:04+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:36:04+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester5","marker":"internal/testutil/TestPgStorage_FilterJobs","time":"2026-01-10T16:36:04+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:37:12+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester7","port":"9090","time":"2026-01-10T16:37:12+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester7","time":"2026-01-10T16:37:12+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester7","marker":"internal/testutil/TestExecutor_SingleJob","time":"2026-01-10T16:37:12+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:37:12+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester7","marker":"internal/testutil/TestExecutor_SingleJob","time":"2026-01-10T16:37:12+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:37:12+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester9","port":"9090","time":"2026-01-10T16:37:12+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester9","time":"2026-01-10T16:37:12+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester9","marker":"internal/testutil/TestExecutor_MultipleJobs","time":"2026-01-10T16:37:12+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:37:13+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester9","marker":"internal/testutil/TestExecutor_MultipleJobs","time":"2026-01-10T16:37:13+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:37:13+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester6","port":"9090","time":"2026-01-10T16:37:13+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester6","time":"2026-01-10T16:37:13+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester6","marker":"internal/testutil/TestExecutor_ExecuteNow","time":"2026-01-10T16:37:13+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:37:13+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester6","marker":"internal/testutil/TestExecutor_ExecuteNow","time":"2026-01-10T16:37:13+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:37:13+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester3","port":"9091","time":"2026-01-10T16:37:13+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester3","time":"2026-01-10T16:37:13+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester3","marker":"internal/testutil/TestClient_Register","time":"2026-01-10T16:37:13+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:37:13+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester3","marker":"internal/testutil/TestClient_Register","time":"2026-01-10T16:37:13+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:37:13+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester5","port":"9091","time":"2026-01-10T16:37:13+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester5","time":"2026-01-10T16:37:14+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester5","marker":"internal/testutil/TestClient_RegisterStartAfter","time":"2026-01-10T16:37:14+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:37:14+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester5","marker":"internal/testutil/TestClient_RegisterStartAfter","time":"2026-01-10T16:37:14+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:37:14+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester8","port":"9091","time":"2026-01-10T16:37:14+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester8","time":"2026-01-10T16:37:14+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester8","marker":"internal/testutil/TestExecutor_Cleanup","time":"2026-01-10T16:37:14+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:37:19+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester8","marker":"internal/testutil/TestExecutor_Cleanup","time":"2026-01-10T16:37:19+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:37:19+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester9","port":"9091","time":"2026-01-10T16:37:19+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester9","time":"2026-01-10T16:37:19+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester9","marker":"internal/testutil/TestPgStorage_RegisterJob","time":"2026-01-10T16:37:19+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:37:19+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester9","marker":"internal/testutil/TestPgStorage_RegisterJob","time":"2026-01-10T16:37:19+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:37:19+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester4","port":"9090","time":"2026-01-10T16:37:19+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester4","time":"2026-01-10T16:37:19+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester4","marker":"internal/testutil/TestPgStorage_RegisterJob_DuplicateError","time":"2026-01-10T16:37:19+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:37:20+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester4","marker":"internal/testutil/TestPgStorage_RegisterJob_DuplicateError","time":"2026-01-10T16:37:20+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:37:20+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester8","port":"9090","time":"2026-01-10T16:37:20+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester8","time":"2026-01-10T16:37:20+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester8","marker":"internal/testutil/TestPgStorage_GetOpenJobCandidates","time":"2026-01-10T16:37:20+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:37:20+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester8","marker":"internal/testutil/TestPgStorage_GetOpenJobCandidates","time":"2026-01-10T16:37:20+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:37:20+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester10","port":"9090","time":"2026-01-10T16:37:20+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester10","time":"2026-01-10T16:37:20+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester10","marker":"internal/testutil/TestPgStorage_TryTakeOverJob","time":"2026-01-10T16:37:20+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:37:20+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester10","marker":"internal/testutil/TestPgStorage_TryTakeOverJob","time":"2026-01-10T16:37:20+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:37:20+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester2","port":"9091","time":"2026-01-10T16:37:20+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester2","time":"2026-01-10T16:37:20+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester2","marker":"internal/testutil/TestPgStorage_SendHeartbeat","time":"2026-01-10T16:37:20+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:37:20+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester2","marker":"internal/testutil/TestPgStorage_SendHeartbeat","time":"2026-01-10T16:37:20+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:37:20+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester2","port":"9090","time":"2026-01-10T16:37:20+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester2","time":"2026-01-10T16:37:20+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester2","marker":"internal/testutil/TestPgStorage_UpdateJob","time":"2026-01-10T16:37:20+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:37:20+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester2","marker":"internal/testutil/TestPgStorage_UpdateJob","time":"2026-01-10T16:37:20+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:37:20+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester1","port":"9091","time":"2026-01-10T16:37:20+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester1","time":"2026-01-10T16:37:21+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester1","marker":"internal/testutil/TestPgStorage_ClearDoneJobs","time":"2026-01-10T16:37:21+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:37:21+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester1","marker":"internal/testutil/TestPgStorage_ClearDoneJobs","time":"2026-01-10T16:37:21+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:37:21+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester4","port":"9091","time":"2026-01-10T16:37:21+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester4","time":"2026-01-10T16:37:21+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester4","marker":"internal/testutil/TestPgStorage_FilterJobs","time":"2026-01-10T16:37:21+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:37:21+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester4","marker":"internal/testutil/TestPgStorage_FilterJobs","time":"2026-01-10T16:37:21+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:39:42+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester6","port":"9091","time":"2026-01-10T16:39:42+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester6","time":"2026-01-10T16:39:42+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester6","marker":"internal/testutil/TestExecutor_SingleJob","time":"2026-01-10T16:39:42+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:39:42+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester6","marker":"internal/testutil/TestExecutor_SingleJob","time":"2026-01-10T16:39:42+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:39:42+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester7","port":"9091","time":"2026-01-10T16:39:42+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester7","time":"2026-01-10T16:39:42+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester7","marker":"internal/testutil/TestExecutor_MultipleJobs","time":"2026-01-10T16:39:42+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:39:43+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester7","marker":"internal/testutil/TestExecutor_MultipleJobs","time":"2026-01-10T16:39:43+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:39:43+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester10","port":"9091","time":"2026-01-10T16:39:43+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester10","time":"2026-01-10T16:39:44+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester10","marker":"internal/testutil/TestExecutor_ExecuteNow","time":"2026-01-10T16:39:44+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:39:44+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester10","marker":"internal/testutil/TestExecutor_ExecuteNow","time":"2026-01-10T16:39:44+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:39:44+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester1","port":"9090","time":"2026-01-10T16:39:44+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester1","time":"2026-01-10T16:39:44+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester1","marker":"internal/testutil/TestClient_Register","time":"2026-01-10T16:39:44+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:39:44+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester1","marker":"internal/testutil/TestClient_Register","time":"2026-01-10T16:39:44+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:39:44+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester3","port":"9090","time":"2026-01-10T16:39:44+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester3","time":"2026-01-10T16:39:44+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester3","marker":"internal/testutil/TestClient_RegisterStartAfter","time":"2026-01-10T16:39:44+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:39:44+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester3","marker":"internal/testutil/TestClient_RegisterStartAfter","time":"2026-01-10T16:39:44+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:39:44+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester5","port":"9090","time":"2026-01-10T16:39:44+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester5","time":"2026-01-10T16:39:44+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester5","marker":"internal/testutil/TestExecutor_Cleanup","time":"2026-01-10T16:39:44+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:39:49+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester5","marker":"internal/testutil/TestExecutor_Cleanup","time":"2026-01-10T16:39:49+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:39:49+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester7","port":"9090","time":"2026-01-10T16:39:49+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester7","time":"2026-01-10T16:39:49+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester7","marker":"internal/testutil/TestPgStorage_RegisterJob","time":"2026-01-10T16:39:49+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:39:49+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester7","marker":"internal/testutil/TestPgStorage_RegisterJob","time":"2026-01-10T16:39:49+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:39:49+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester9","port":"9090","time":"2026-01-10T16:39:49+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester9","time":"2026-01-10T16:39:49+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester9","marker":"internal/testutil/TestPgStorage_RegisterJob_DuplicateError","time":"2026-01-10T16:39:49+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:39:49+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester9","marker":"internal/testutil/TestPgStorage_RegisterJob_DuplicateError","time":"2026-01-10T16:39:49+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:39:49+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester6","port":"9090","time":"2026-01-10T16:39:49+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester6","time":"2026-01-10T16:39:50+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester6","marker":"internal/testutil/TestPgStorage_GetOpenJobCandidates","time":"2026-01-10T16:39:50+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:39:50+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester6","marker":"internal/testutil/TestPgStorage_GetOpenJobCandidates","time":"2026-01-10T16:39:50+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:39:50+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester3","port":"9091","time":"2026-01-10T16:39:50+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester3","time":"2026-01-10T16:39:50+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester3","marker":"internal/testutil/TestPgStorage_TryTakeOverJob","time":"2026-01-10T16:39:50+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:39:50+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester3","marker":"internal/testutil/TestPgStorage_TryTakeOverJob","time":"2026-01-10T16:39:50+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:39:50+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester5","port":"9091","time":"2026-01-10T16:39:50+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester5","time":"2026-01-10T16:39:50+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester5","marker":"internal/testutil/TestPgStorage_SendHeartbeat","time":"2026-01-10T16:39:50+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:39:50+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester5","marker":"internal/testutil/TestPgStorage_SendHeartbeat","time":"2026-01-10T16:39:50+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:39:50+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester8","port":"9091","time":"2026-01-10T16:39:50+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester8","time":"2026-01-10T16:39:50+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester8","marker":"internal/testutil/TestPgStorage_UpdateJob","time":"2026-01-10T16:39:50+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:39:50+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester8","marker":"internal/testutil/TestPgStorage_UpdateJob","time":"2026-01-10T16:39:50+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:39:50+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester9","port":"9091","time":"2026-01-10T16:39:50+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester9","time":"2026-01-10T16:39:50+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester9","marker":"internal/testutil/TestPgStorage_ClearDoneJobs","time":"2026-01-10T16:39:50+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:39:50+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9091/tester9","marker":"internal/testutil/TestPgStorage_ClearDoneJobs","time":"2026-01-10T16:39:50+07:00","message":"UNLOCK"}
+{"level":"debug","path":"/lock","method":"GET","time":"2026-01-10T16:39:50+07:00","message":"Request received"}
+{"level":"debug","dbname":"tester4","port":"9090","time":"2026-01-10T16:39:50+07:00","message":"Resetting database"}
+{"level":"debug","dbname":"tester4","time":"2026-01-10T16:39:51+07:00","message":"Database reset complete"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester4","marker":"internal/testutil/TestPgStorage_FilterJobs","time":"2026-01-10T16:39:51+07:00","message":"LOCK"}
+{"level":"debug","path":"/unlock","method":"POST","time":"2026-01-10T16:39:51+07:00","message":"Request received"}
+{"level":"info","connStr":"postgresql://tester:LegacyCodeIsOneWithNoTest@localhost:9090/tester4","marker":"internal/testutil/TestPgStorage_FilterJobs","time":"2026-01-10T16:39:51+07:00","message":"UNLOCK"}

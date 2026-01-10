@@ -4,34 +4,28 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/rickchristie/ssproc/util"
-	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/rickchristie/ssproc/internal/testutil"
+	"github.com/rickchristie/ssproc/internal/timeutil"
 )
 
-// PgTestHelper is a testing utilities that can be used to set up states for testing.
-//
-// IMPORTANT: Do not use this outside of tests. Suggestions on how to best organize test utilities are welcome.
+// PgTestHelper provides testing utilities for ssproc.
 type PgTestHelper struct {
 	T         *testing.T
 	Ctx       context.Context
 	PgStorage *PgStorage
 }
 
-func SetProcClientMockTimeForTest[Data JobData](client *Client[Data], mockTime *util.MockTime) {
-	client.utilTime = mockTime
-}
-
-func SetExecutorMockTimeForTest[Data JobData](executor *Executor[Data], mockTime *util.MockTime) {
-	executor.timeUtil = mockTime
-}
-
-func (h *PgTestHelper) SetProcMockTimeForTest(mockTime *util.MockTime) {
+// SetPgMockTimeForTest sets a mock time for the storage.
+func (h *PgTestHelper) SetPgMockTimeForTest(mockTime timeutil.Time) {
 	h.PgStorage.utilTime = mockTime
 }
 
-//goland:noinspection SqlResolve
+// GetJob retrieves a job from the database.
 func (h *PgTestHelper) GetJob(t *testing.T, jobId string) (foundJob *Job, isValid map[string]bool) {
 	tx, ctx, cancel, err := h.PgStorage.beginTx(h.Ctx)
 	assert.Nil(t, err)
@@ -39,7 +33,7 @@ func (h *PgTestHelper) GetJob(t *testing.T, jobId string) (foundJob *Job, isVali
 
 	query := fmt.Sprintf(`SELECT
 			job_id, job_data, process_id, goroutine_id, goroutine_heart_beat_ts, goroutine_lease_expire_ts,
-			status, next_subprocess, run_type, goroutine_ids, exec_count, comp_count, 
+			status, next_subprocess, run_type, goroutine_ids, exec_count, comp_count,
 			created_ts, start_after_ts, started_ts, end_ts, last_update_ts
 		FROM
 			%v.%v
@@ -75,6 +69,7 @@ func (h *PgTestHelper) GetJob(t *testing.T, jobId string) (foundJob *Job, isVali
 	return &job, isValid
 }
 
+// CountNotDoneJobs counts jobs that are not done.
 func (h *PgTestHelper) CountNotDoneJobs(t *testing.T, processId string) int {
 	tx, ctx, cancel, err := h.PgStorage.beginTx(h.Ctx)
 	assert.Nil(t, err)
@@ -97,17 +92,18 @@ func (h *PgTestHelper) CountNotDoneJobs(t *testing.T, processId string) int {
 	return count
 }
 
+// SetLeaseExpireTime sets the lease expire time for a job.
 func (h *PgTestHelper) SetLeaseExpireTime(t *testing.T, jobId string, leaseExpireTs time.Time) {
 	tx, ctx, cancel, err := h.PgStorage.beginTx(h.Ctx)
 	assert.Nil(t, err)
 	defer h.PgStorage.rollback(ctx, cancel, tx)
 
 	query := fmt.Sprintf(`UPDATE
-				%v.%v
-			SET
-				goroutine_lease_expire_ts = $1
-			WHERE
-				job_id = $2`,
+			%v.%v
+		SET
+			goroutine_lease_expire_ts = $1
+		WHERE
+			job_id = $2`,
 		h.PgStorage.schema, h.PgStorage.table,
 	)
 	_, err = tx.Exec(h.Ctx, query, leaseExpireTs, jobId)
@@ -117,156 +113,135 @@ func (h *PgTestHelper) SetLeaseExpireTime(t *testing.T, jobId string, leaseExpir
 	assert.Nil(t, err)
 }
 
+// WaitJobStatus waits for a job to reach a specific status.
 func (h *PgTestHelper) WaitJobStatus(t *testing.T, timeout time.Duration, jobId string, status JobStatus) {
-	err := util.Await(timeout, func() bool {
+	err := testutil.Await(timeout, func() bool {
 		job, _ := h.GetJob(t, jobId)
 		return job.Status == status
 	})
 	assert.Nil(t, err)
 }
 
+// WaitJobGoroutineIdChanged waits for the goroutine ID to change.
 func (h *PgTestHelper) WaitJobGoroutineIdChanged(t *testing.T, timeout time.Duration, goroutineIds []string, jobId string) {
-	err := util.Await(timeout, func() bool {
+	err := testutil.Await(timeout, func() bool {
 		found, _ := h.GetJob(t, jobId)
 		return len(goroutineIds) < len(found.GoroutineIds)
 	})
 	assert.Nil(t, err)
 
-	// Assert that trace is inserted.
 	found, _ := h.GetJob(t, jobId)
 	assert.Equal(t, len(goroutineIds)+1, len(found.GoroutineIds))
 	expected := append(goroutineIds, found.GoroutineIds[len(found.GoroutineIds)-1])
 	assert.Equal(t, expected, found.GoroutineIds)
 }
 
+// WaitAllJobsDone waits for all jobs to be done.
 func (h *PgTestHelper) WaitAllJobsDone(t *testing.T, timeout time.Duration, processId string) {
-	err := util.Await(timeout, func() bool {
+	err := testutil.Await(timeout, func() bool {
 		count := h.CountNotDoneJobs(t, processId)
 		return count == 0
 	})
 	assert.Nil(t, err)
 }
 
-func assertJobDone[Data JobData](
-	t *testing.T,
-	h *PgTestHelper,
-	process Process[Data],
-	jobData Data,
-	execCount int,
-	nextSubprocess int,
-	regTime time.Time,
-) {
-	found, _ := h.GetJob(t, jobData.GetJobId())
-	assert.Equal(t, jobData.GetJobId(), found.JobId)
-	assert.Equal(t, JSDone, found.Status)
-	assert.NotEmpty(t, found.GoroutineId)
-	assert.Equal(t, nextSubprocess, found.NextSubprocess)
-	assert.Equal(t, execCount, found.ExecCount)
+// GetSuccessfulJobs returns jobs with status JSDone.
+func (h *PgTestHelper) GetSuccessfulJobs(endTsLte time.Time) []*Job {
+	tx, ctx, cancel, err := h.PgStorage.beginTx(h.Ctx)
+	assert.Nil(h.T, err)
+	defer h.PgStorage.rollback(ctx, cancel, tx)
 
-	assert.Equal(t, RTNormal, found.RunType)
-	assert.NotEmpty(t, found.GoroutineIds)
+	query := fmt.Sprintf(`SELECT
+			job_id, job_data, process_id, goroutine_id, goroutine_heart_beat_ts, goroutine_lease_expire_ts, status,
+			next_subprocess, run_type, goroutine_ids, exec_count, comp_count, created_ts, start_after_ts,
+			started_ts, end_ts, last_update_ts
+		FROM %v.%v
+		WHERE status=$1 and end_ts <= $2
+	`, h.PgStorage.schema, h.PgStorage.table)
+	rows, err := tx.Query(ctx, query, JSDone, endTsLte)
+	assert.Nil(h.T, err)
+	defer rows.Close()
 
-	assert.Equal(t, true, found.GoroutineHeartBeatTs.UnixMicro() >= regTime.UnixMicro())
-	assert.Equal(t, true, found.CreatedTs.UnixMicro() >= regTime.UnixMicro())
-	assert.Equal(t, true, found.StartedTs.UnixMicro() >= regTime.UnixMicro())
-	assert.Equal(t, true, found.StartAfterTs.UnixMicro() >= regTime.UnixMicro())
-	assert.Equal(t, true, found.EndTs.UnixMicro() >= regTime.UnixMicro())
-	assert.Equal(t, true, found.LastUpdateTs.UnixMicro() >= regTime.UnixMicro())
+	res := []*Job{}
+	for rows.Next() {
+		job := Job{}
+		err = h.PgStorage.convertJob(rows, &job)
+		assert.Nil(h.T, err)
+		res = append(res, &job)
+	}
 
-	foundJobData, err := process.Deserialize(found.JobData)
-	assert.Nil(t, err)
-	assert.Equal(t, jobData, foundJobData)
+	err = rows.Err()
+	assert.Nil(h.T, err)
+
+	return res
 }
 
-func assertJobNotTakenOver[Data JobData](
-	t *testing.T,
-	h *PgTestHelper,
-	process Process[Data],
-	jobData Data,
-	regTime time.Time,
-) {
-	found, _ := h.GetJob(t, jobData.GetJobId())
-	assert.Equal(t, jobData.GetJobId(), found.JobId)
-	assert.Equal(t, JSReady, found.Status)
-	assert.Empty(t, found.GoroutineId)
-	assert.Equal(t, 0, found.NextSubprocess)
-	assert.Equal(t, 0, found.ExecCount)
+// GetAllJobs returns all jobs.
+func (h *PgTestHelper) GetAllJobs() map[string]*Job {
+	tx, ctx, cancel, err := h.PgStorage.beginTx(h.Ctx)
+	assert.Nil(h.T, err)
+	defer h.PgStorage.rollback(ctx, cancel, tx)
 
-	assert.Equal(t, RTNormal, found.RunType)
-	assert.Empty(t, found.GoroutineIds)
+	query := fmt.Sprintf(`SELECT
+			job_id, job_data, process_id, goroutine_id, goroutine_heart_beat_ts, goroutine_lease_expire_ts, status,
+			next_subprocess, run_type, goroutine_ids, exec_count, comp_count, created_ts, start_after_ts,
+			started_ts, end_ts, last_update_ts
+		FROM %v.%v
+	`, h.PgStorage.schema, h.PgStorage.table)
+	rows, err := tx.Query(ctx, query)
+	assert.Nil(h.T, err)
+	defer rows.Close()
 
-	assert.Equal(t, true, found.CreatedTs.UnixMicro() >= regTime.UnixMicro())
-	assert.Equal(t, true, found.StartAfterTs.UnixMicro() >= regTime.UnixMicro())
-	assert.Equal(t, true, found.LastUpdateTs.UnixMicro() >= regTime.UnixMicro())
+	res := map[string]*Job{}
+	for rows.Next() {
+		job := Job{}
+		err = h.PgStorage.convertJob(rows, &job)
+		assert.Nil(h.T, err)
+		res[job.JobId] = &job
+	}
 
-	assert.Equal(t, true, found.GoroutineHeartBeatTs.IsZero())
-	assert.Equal(t, true, found.StartedTs.IsZero())
-	assert.Equal(t, true, found.EndTs.IsZero())
+	err = rows.Err()
+	assert.Nil(h.T, err)
 
-	foundJobData, err := process.Deserialize(found.JobData)
-	assert.Nil(t, err)
-	assert.Equal(t, jobData, foundJobData)
+	return res
 }
 
-func assertJobError[Data JobData](
-	t *testing.T,
-	h *PgTestHelper,
-	process Process[Data],
-	jobData Data,
-	execCount int,
-	nextSubprocess int,
-	regTime time.Time,
-) {
-	found, _ := h.GetJob(t, jobData.GetJobId())
-	assert.Equal(t, jobData.GetJobId(), found.JobId)
-	assert.Equal(t, JSError, found.Status)
-	assert.NotEmpty(t, found.GoroutineId)
-	assert.Equal(t, nextSubprocess, found.NextSubprocess)
-	assert.Equal(t, execCount, found.ExecCount)
-
-	assert.Equal(t, true, found.GoroutineHeartBeatTs.UnixMicro() >= regTime.UnixMicro())
-	assert.Equal(t, true, found.CreatedTs.UnixMicro() >= regTime.UnixMicro())
-	assert.Equal(t, true, found.StartedTs.UnixMicro() >= regTime.UnixMicro())
-	assert.Equal(t, true, found.StartAfterTs.UnixMicro() >= regTime.UnixMicro())
-	assert.Equal(t, true, found.EndTs.UnixMicro() >= regTime.UnixMicro())
-	assert.Equal(t, true, found.LastUpdateTs.UnixMicro() >= regTime.UnixMicro())
-
-	foundJobData, err := process.Deserialize(found.JobData)
+// SetJobRunType updates the run_type field for a job.
+func (h *PgTestHelper) SetJobRunType(t *testing.T, jobId string, runType RunType) {
+	tx, ctx, cancel, err := h.PgStorage.beginTx(h.Ctx)
 	assert.Nil(t, err)
-	assert.Equal(t, jobData, foundJobData)
+	defer h.PgStorage.rollback(ctx, cancel, tx)
+
+	query := fmt.Sprintf(`UPDATE
+			%v.%v
+		SET
+			run_type = $1
+		WHERE
+			job_id = $2`,
+		h.PgStorage.schema, h.PgStorage.table,
+	)
+	_, err = tx.Exec(h.Ctx, query, runType, jobId)
+	assert.Nil(t, err)
+
+	err = tx.Commit(h.Ctx)
+	assert.Nil(t, err)
 }
 
-func assertJobFailExec[Data JobData](
+// CreateJobUpdaterForTest creates a JobDataUpdater for testing.
+func CreateJobUpdaterForTest[D JobData](
 	t *testing.T,
-	h *PgTestHelper,
-	process Process[Data],
-	jobData Data,
-	execCount int,
-	nextSubprocess int,
-	regTime time.Time,
-) {
-	found, _ := h.GetJob(t, jobData.GetJobId())
-	assert.Equal(t, jobData.GetJobId(), found.JobId)
-	assert.Equal(t, JSReady, found.Status)
-	assert.NotEmpty(t, found.GoroutineId)
-	assert.Equal(t, nextSubprocess, found.NextSubprocess)
-	assert.Equal(t, execCount, found.ExecCount)
-
-	assert.Equal(t, true, found.GoroutineHeartBeatTs.UnixMicro() >= regTime.UnixMicro())
-	assert.Equal(t, true, found.CreatedTs.UnixMicro() >= regTime.UnixMicro())
-	assert.Equal(t, true, found.StartedTs.UnixMicro() >= regTime.UnixMicro())
-	assert.Equal(t, true, found.StartAfterTs.UnixMicro() >= regTime.UnixMicro())
-	assert.Equal(t, true, found.EndTs.IsZero())
-	assert.Equal(t, true, found.LastUpdateTs.UnixMicro() >= regTime.UnixMicro())
-
-	foundJobData, err := process.Deserialize(found.JobData)
-	assert.Nil(t, err)
-	assert.Equal(t, jobData, foundJobData)
-}
-
-func assertJobDataIsLatest[Data JobData](t *testing.T, h *PgTestHelper, process Process[Data], jobData Data) {
-	found, _ := h.GetJob(t, jobData.GetJobId())
-	foundJobData, err := process.Deserialize(found.JobData)
-	assert.Nil(t, err)
-	assert.Equal(t, jobData, foundJobData)
+	ctx context.Context,
+	process Process[D],
+	storage Storage,
+	job *Job,
+	executor *Executor[D],
+) JobDataUpdater[D] {
+	return func(jobData D) error {
+		serialized, err := process.Serialize(jobData)
+		if err != nil {
+			return err
+		}
+		job.JobData = serialized
+		return storage.UpdateJob(ctx, job, executor.config.LeaseExpireDuration)
+	}
 }

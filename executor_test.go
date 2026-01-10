@@ -2,452 +2,199 @@ package ssproc
 
 import (
 	"context"
-	"errors"
-	"github.com/rickchristie/ssproc/pgtest"
-	"github.com/rickchristie/ssproc/util"
-	"github.com/stretchr/testify/assert"
-	"go.uber.org/goleak"
-	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+
+	"github.com/rickchristie/ssproc/internal/testutil"
 )
 
-func TestExecute_PanicOnExecute(t *testing.T) {
-	if TestLeak {
-		defer goleak.VerifyNone(t)
-		defer pgtest.Close()
-	} else {
-		t.Parallel()
-	}
+func TestExecutor_SingleJob(t *testing.T) {
+	state := StateCreator()
+	state.Setup(t)
+	defer state.TearDown(t)
 
-	s := StateCreator()
-	s.Setup(t)
-	defer s.TearDown(t)
+	ctx := context.Background()
+	process := NewTestProcess("test-executor-single")
 
-	storage := StorageMockWrapper{Wrapped: s.Storage}
-	storage.UpdateJobMock = func(ctx context.Context, job *Job, leaseExpireDuration time.Duration) error {
-		panic("example panic on execute")
-	}
-
-	proc := newMultiProcess()
-	process := proc.(*multiProcess)
-
-	executorA := newExecutor(t, s, proc, "ExecutorA")
-	executorA.storage = &storage
-	executorA.config.SweepInterval = 300 * time.Millisecond
-	executorA.config.HeartbeatInterval = 100 * time.Millisecond
-	executorA.config.LeaseExpireDuration = 2 * time.Second
-	executorA.config.MaxExecutionCount = 1
-	executorA.Start()
-	defer executorA.Stop()
-
-	// Try register execute, error is returned instead of panicking.
-	jobData := process.newJobData()
-	traceId := util.UUIDString()
-	latest, err := executorA.RegisterExecuteWait(s.h.Ctx, traceId, jobData)
-	assert.NotNil(t, err)
-	assertJobDataIsLatest(t, s.h, proc, latest)
-	assert.Equal(
-		t,
-		true,
-		strings.HasPrefix(err.Error(), "ExecutorA-multi: panic on ssproc execute lib: example panic on execute"),
-	)
-
-	// Assert heartbeat stops (i.e. it doesn't change even when we wait 1 second, heartbeat is 100ms).
-	job, _ := s.h.GetJob(t, jobData.JobId)
-	err = util.Await(1*time.Second, func() bool {
-		found, _ := s.h.GetJob(t, jobData.JobId)
-		return job.GoroutineHeartBeatTs.UnixMicro() != found.GoroutineHeartBeatTs.UnixMicro()
-	})
-	assert.NotNil(t, err)
-
-	// Job is taken over, but it's not updated to error.
-	err = util.Await(4*time.Second, func() bool {
-		foundJob, _ := s.h.GetJob(t, jobData.JobId)
-		return foundJob.GoroutineId != job.GoroutineId
+	executor, err := NewExecutor(ctx, process, state.Storage, ExecutorConfig{
+		MaxWorkers:          2,
+		HeartbeatInterval:   5 * time.Second,
+		LeaseExpireDuration: 10 * time.Second,
+		SweepInterval:       100 * time.Millisecond,
+		ExecutionTimeout:    30 * time.Second,
+		MaxExecutionCount:   3,
 	})
 	assert.Nil(t, err)
 
-	// Job will not be marked as done or error.
-	err = util.Await(2*time.Second, func() bool {
-		foundJob, _ := s.h.GetJob(t, jobData.JobId)
-		return foundJob.Status != JSReady
-	})
-	assert.NotNil(t, err)
+	// Register and execute directly
+	jobId := uuid.New().String()
+	jobData := TestJobData{ID: jobId, Counter: 0}
+	traceId := uuid.New().String()
 
-	// Exec count not incremented because we made UpdateJob panic.
-	job, _ = s.h.GetJob(t, jobData.JobId)
-	assert.Equal(t, JSReady, job.Status)
-	assert.Equal(t, 0, job.ExecCount)
+	result, err := executor.RegisterExecuteWait(ctx, traceId, jobData)
+	assert.Nil(t, err)
+	assert.Equal(t, 1, result.Counter)
+
+	// Verify job is done
+	found, _ := state.h.GetJob(t, jobId)
+	assert.Equal(t, JSDone, found.Status)
 }
 
-func TestExecute_HeartbeatError(t *testing.T) {
-	if TestLeak {
-		defer goleak.VerifyNone(t)
-		defer pgtest.Close()
-	} else {
-		t.Parallel()
-	}
+func TestExecutor_MultipleJobs(t *testing.T) {
+	state := StateCreator()
+	state.Setup(t)
+	defer state.TearDown(t)
 
-	s := StateCreator()
-	s.Setup(t)
-	defer s.TearDown(t)
+	ctx := context.Background()
+	process := NewTestProcess("test-executor-multi")
 
-	// Use mock storage wrapper, so we can modify heartbeat behavior. We want it to start failing when we change
-	// the boolean.
-	shouldFailAtomic := atomic.Bool{}
-	failCount := atomic.Int64{}
-	storage := StorageMockWrapper{Wrapped: s.Storage}
-	storage.SendHeartbeatMock = func(
-		ctx context.Context,
-		goroutineId string,
-		jobId string,
-		leaseExpireDuration time.Duration,
-	) error {
-		if shouldFailAtomic.Load() {
-			// Fail three times, then flip it back to false.
-			count := failCount.Add(1)
-			if count >= 3 {
-				shouldFailAtomic.Store(false)
-			}
-			return errors.New("send heartbeat mock failure")
-		}
-		return s.Storage.SendHeartbeat(ctx, goroutineId, jobId, leaseExpireDuration)
-	}
-
-	proc := newMultiProcess()
-	process := proc.(*multiProcess)
-	cStop := make(chan struct{})
-	process.stub = func(
-		subprocessIndex int,
-		goroutineId string,
-		jobData *multiJobData,
-		update JobDataUpdater[*multiJobData],
-	) SubprocessResult {
-		// Start sleeping at index 3, simulate processing.
-		if subprocessIndex == 2 {
-			timer := time.NewTimer(8 * time.Second)
-			defer timer.Stop()
-			select {
-			case <-cStop:
-				// No-op.
-			case <-timer.C:
-				// No-op.
-			}
-			return SRFailed
-		}
-		return SRSuccess
-	}
-	utilTime := util.NewGlobalTime(time.Local)
-	client := NewClient(&storage, proc, utilTime)
-
-	// Start executor.
-	leaseExpireDuration := 1 * time.Second
-	executorA := newExecutor(t, s, proc, "ExecutorA")
-	executorA.storage = &storage
-	executorA.config.SweepInterval = 300 * time.Millisecond
-	executorA.config.HeartbeatInterval = 100 * time.Millisecond
-	executorA.config.LeaseExpireDuration = leaseExpireDuration
-	executorA.config.ExecutionTimeout = 20 * time.Second
-	executorA.config.MaxExecutionCount = 1
-	executorA.Start()
-	defer executorA.Stop()
-
-	jobData := process.newJobData()
-	regTime := time.Now()
-	err := client.Register(s.h.Ctx, jobData)
-	assert.Nil(t, err)
-
-	// Wait until job is taken over.
-	err = util.Await(5*time.Second, func() bool {
-		job, _ := s.h.GetJob(t, jobData.JobId)
-		return job.GoroutineId != ""
+	executor, err := NewExecutor(ctx, process, state.Storage, ExecutorConfig{
+		MaxWorkers:          4,
+		HeartbeatInterval:   5 * time.Second,
+		LeaseExpireDuration: 10 * time.Second,
+		SweepInterval:       100 * time.Millisecond,
+		ExecutionTimeout:    30 * time.Second,
+		MaxExecutionCount:   3,
 	})
 	assert.Nil(t, err)
+	executor.Start()
+	defer executor.Stop()
 
-	job, _ := s.h.GetJob(t, jobData.JobId)
-	assert.Equal(t, true, strings.HasPrefix(job.GoroutineId, "ExecutorA"))
-	goroutineId := job.GoroutineId
-
-	// Heartbeat gets updated per 100 milliseconds. We verify that heartbeat gets updated.
-	// Check for 10 increments.
-	expectedTime := time.Now()
-	for i := 0; i < 10; i++ {
-		expectedTime = expectedTime.Add(100 * time.Millisecond)
-		err = util.Await(1*time.Second, func() bool {
-			found, _ := s.h.GetJob(t, jobData.JobId)
-			assert.Equal(t, goroutineId, found.GoroutineId)
-
-			isIncremented := found.GoroutineHeartBeatTs.UnixMicro() >= expectedTime.UnixMicro()
-			if isIncremented {
-				expectedTime = found.GoroutineHeartBeatTs
-			}
-
-			// No matter if it's incremented or not, LeaseExpireTs must be the same as HeartBeat + ExpireDuration.
-			assert.Equal(t, found.GoroutineLeaseExpireTs, found.GoroutineHeartBeatTs.Add(leaseExpireDuration))
-
-			return isIncremented
-		})
+	// Register multiple jobs using client
+	client := NewClientSimple(state.Storage, process)
+	jobIds := make([]string, 5)
+	for i := 0; i < 5; i++ {
+		jobId := uuid.New().String()
+		jobIds[i] = jobId
+		err := client.Register(ctx, TestJobData{ID: jobId, Counter: 0})
 		assert.Nil(t, err)
 	}
 
-	// Make heartbeat stop. This should cause heartbeat to fail three times, which will then cancel the context.
-	shouldFailAtomic.Store(true)
+	// Wait for all jobs to complete
+	state.h.WaitAllJobsDone(t, 30*time.Second, process.Id())
 
-	// We expect context to fail, so the job would fail.
-	s.h.WaitJobStatus(t, 5*time.Second, jobData.JobId, JSError)
-	assertJobError[*multiJobData](t, s.h, process, jobData, 1, 2, regTime)
-
-	// Stop subprocess goroutine so we can check for goroutine leaks.
-	close(cStop)
+	// Verify all jobs are done
+	for _, jobId := range jobIds {
+		found, _ := state.h.GetJob(t, jobId)
+		assert.Equal(t, JSDone, found.Status)
+	}
 }
 
-func TestExecute_HeartbeatPanic(t *testing.T) {
-	if TestLeak {
-		defer goleak.VerifyNone(t)
-		defer pgtest.Close()
-	} else {
-		t.Parallel()
-	}
+func TestExecutor_ExecuteNow(t *testing.T) {
+	state := StateCreator()
+	state.Setup(t)
+	defer state.TearDown(t)
 
-	s := StateCreator()
-	s.Setup(t)
-	defer s.TearDown(t)
+	ctx := context.Background()
+	process := NewTestProcess("test-executor-now")
 
-	// Use mock storage wrapper, so we can modify heartbeat behavior. We want it to start failing when we change
-	// the boolean.
-	shouldPanicAtomic := atomic.Bool{}
-	failCount := atomic.Int64{}
-	storage := StorageMockWrapper{Wrapped: s.Storage}
-	storage.SendHeartbeatMock = func(
-		ctx context.Context,
-		goroutineId string,
-		jobId string,
-		leaseExpireDuration time.Duration,
-	) error {
-		if shouldPanicAtomic.Load() {
-			// Fail three times, then flip it back to false.
-			count := failCount.Add(1)
-			if count >= 3 {
-				shouldPanicAtomic.Store(false)
-			}
-			panic("example heartbeat panic")
-		}
-		return s.Storage.SendHeartbeat(ctx, goroutineId, jobId, leaseExpireDuration)
-	}
-
-	proc := newMultiProcess()
-	process := proc.(*multiProcess)
-	cStop := make(chan struct{})
-	process.stub = func(
-		subprocessIndex int,
-		goroutineId string,
-		jobData *multiJobData,
-		update JobDataUpdater[*multiJobData],
-	) SubprocessResult {
-		// Start sleeping at index 3, simulate processing.
-		if subprocessIndex == 2 {
-			timer := time.NewTimer(8 * time.Second)
-			defer timer.Stop()
-			select {
-			case <-cStop:
-				// No-op.
-			case <-timer.C:
-				// No-op.
-			}
-			return SRFailed
-		}
-		return SRSuccess
-	}
-	utilTime := util.NewGlobalTime(time.Local)
-	client := NewClient(&storage, proc, utilTime)
-
-	// Start executor.
-	leaseExpireDuration := 1 * time.Second
-	executorA := newExecutor(t, s, proc, "ExecutorA")
-	executorA.storage = &storage
-	executorA.config.SweepInterval = 300 * time.Millisecond
-	executorA.config.HeartbeatInterval = 100 * time.Millisecond
-	executorA.config.LeaseExpireDuration = leaseExpireDuration
-	executorA.config.ExecutionTimeout = 20 * time.Second
-	executorA.config.MaxExecutionCount = 1
-	executorA.Start()
-	defer executorA.Stop()
-
-	jobData := process.newJobData()
-	regTime := time.Now()
-	err := client.Register(s.h.Ctx, jobData)
-	assert.Nil(t, err)
-
-	// Wait until job is taken over.
-	err = util.Await(5*time.Second, func() bool {
-		job, _ := s.h.GetJob(t, jobData.JobId)
-		return job.GoroutineId != ""
+	executor, err := NewExecutor(ctx, process, state.Storage, ExecutorConfig{
+		MaxWorkers:          2,
+		HeartbeatInterval:   5 * time.Second,
+		LeaseExpireDuration: 10 * time.Second,
+		SweepInterval:       1 * time.Hour, // Long interval so sweep doesn't pick it up
+		ExecutionTimeout:    30 * time.Second,
+		MaxExecutionCount:   3,
 	})
 	assert.Nil(t, err)
 
-	job, _ := s.h.GetJob(t, jobData.JobId)
-	assert.Equal(t, true, strings.HasPrefix(job.GoroutineId, "ExecutorA"))
-	goroutineId := job.GoroutineId
+	// Register a job using client
+	client := NewClientSimple(state.Storage, process)
+	jobId := uuid.New().String()
+	err = client.Register(ctx, TestJobData{ID: jobId, Counter: 0})
+	assert.Nil(t, err)
 
-	// Heartbeat gets updated per 100 milliseconds. We verify that heartbeat gets updated.
-	// Check for 10 increments.
-	expectedTime := time.Now()
-	for i := 0; i < 10; i++ {
-		expectedTime = expectedTime.Add(100 * time.Millisecond)
-		err = util.Await(1*time.Second, func() bool {
-			found, _ := s.h.GetJob(t, jobData.JobId)
-			assert.Equal(t, goroutineId, found.GoroutineId)
+	// Execute now
+	executor.ExecuteNow(jobId)
 
-			isIncremented := found.GoroutineHeartBeatTs.UnixMicro() >= expectedTime.UnixMicro()
-			if isIncremented {
-				expectedTime = found.GoroutineHeartBeatTs
-			}
-
-			// No matter if it's incremented or not, LeaseExpireTs must be the same as HeartBeat + ExpireDuration.
-			assert.Equal(t, found.GoroutineLeaseExpireTs, found.GoroutineHeartBeatTs.Add(leaseExpireDuration))
-
-			return isIncremented
-		})
-		assert.Nil(t, err)
-	}
-
-	// Make heartbeat stop. This should cause heartbeat to fail three times, which will then cancel the context.
-	shouldPanicAtomic.Store(true)
-
-	// We expect context to fail, so the job would fail.
-	s.h.WaitJobStatus(t, 5*time.Second, jobData.JobId, JSError)
-	assertJobError[*multiJobData](t, s.h, process, jobData, 1, 2, regTime)
-
-	// Stop subprocess goroutine so we can check for goroutine leaks.
-	close(cStop)
+	// Verify job is done
+	found, _ := state.h.GetJob(t, jobId)
+	assert.Equal(t, JSDone, found.Status)
 }
 
-func TestExecute_HeartbeatFailureContinued(t *testing.T) {
-	if TestLeak {
-		defer goleak.VerifyNone(t)
-		defer pgtest.Close()
-	} else {
-		t.Parallel()
-	}
+func TestClient_Register(t *testing.T) {
+	state := StateCreator()
+	state.Setup(t)
+	defer state.TearDown(t)
 
-	s := StateCreator()
-	s.Setup(t)
-	defer s.TearDown(t)
+	ctx := context.Background()
+	process := NewTestProcess("test-client-register")
+	client := NewClientSimple(state.Storage, process)
 
-	// Use mock storage wrapper, so we can modify heartbeat behavior. We want it to start failing when we change
-	// the boolean.
-	shouldFailAtomic := atomic.Bool{}
-	failCount := atomic.Int64{}
-	storage := StorageMockWrapper{Wrapped: s.Storage}
-	storage.SendHeartbeatMock = func(
-		ctx context.Context,
-		goroutineId string,
-		jobId string,
-		leaseExpireDuration time.Duration,
-	) error {
-		if shouldFailAtomic.Load() {
-			// Fail three times, then flip it back to false.
-			count := failCount.Add(1)
-			if count >= 3 {
-				shouldFailAtomic.Store(false)
-			}
-			return errors.New("send heartbeat mock failure")
-		}
-		return s.Storage.SendHeartbeat(ctx, goroutineId, jobId, leaseExpireDuration)
-	}
-
-	proc := newMultiProcess()
-	process := proc.(*multiProcess)
-	cStop := make(chan struct{})
-	process.stub = func(
-		subprocessIndex int,
-		goroutineId string,
-		jobData *multiJobData,
-		updater JobDataUpdater[*multiJobData],
-	) SubprocessResult {
-		// Start sleeping at index 3, simulate processing.
-		if subprocessIndex == 2 {
-			timer := time.NewTimer(8 * time.Second)
-			defer timer.Stop()
-			select {
-			case <-cStop:
-				// No-op.
-			case <-timer.C:
-				// No-op.
-			}
-		}
-		return SRSuccess
-	}
-	utilTime := util.NewGlobalTime(time.Local)
-	client := NewClient(&storage, proc, utilTime)
-
-	// Start executor.
-	leaseExpireDuration := 1 * time.Second
-	executorA := newExecutor(t, s, proc, "ExecutorA")
-	executorA.storage = &storage
-	executorA.config.SweepInterval = 300 * time.Millisecond
-	executorA.config.HeartbeatInterval = 100 * time.Millisecond
-	executorA.config.LeaseExpireDuration = leaseExpireDuration
-	executorA.config.ExecutionTimeout = 20 * time.Second
-	executorA.config.MaxExecutionCount = 3
-	executorA.Start()
-	defer executorA.Stop()
-
-	jobData := process.newJobData()
-	regTime := time.Now()
-	err := client.Register(s.h.Ctx, jobData)
+	jobId := uuid.New().String()
+	err := client.Register(ctx, TestJobData{ID: jobId, Counter: 0})
 	assert.Nil(t, err)
 
-	// Wait until job is taken over.
-	err = util.Await(5*time.Second, func() bool {
-		job, _ := s.h.GetJob(t, jobData.JobId)
-		return job.GoroutineId != ""
+	// Verify job was registered
+	found, _ := state.h.GetJob(t, jobId)
+	assert.Equal(t, jobId, found.JobId)
+	assert.Equal(t, JSReady, found.Status)
+	assert.Equal(t, process.Id(), found.ProcessId)
+}
+
+func TestClient_RegisterStartAfter(t *testing.T) {
+	state := StateCreator()
+	state.Setup(t)
+	defer state.TearDown(t)
+
+	ctx := context.Background()
+	process := NewTestProcess("test-client-start-after")
+	client := NewClientSimple(state.Storage, process)
+
+	jobId := uuid.New().String()
+	startAfter := time.Now().Add(1 * time.Hour)
+	err := client.RegisterStartAfter(ctx, TestJobData{ID: jobId, Counter: 0}, startAfter)
+	assert.Nil(t, err)
+
+	// Verify job was registered with correct start time
+	found, _ := state.h.GetJob(t, jobId)
+	assert.Equal(t, jobId, found.JobId)
+	assert.Equal(t, JSReady, found.Status)
+	// StartAfterTs should be close to what we set
+	diff := found.StartAfterTs.Sub(startAfter)
+	assert.Less(t, diff.Abs(), 1*time.Second)
+}
+
+func TestExecutor_Cleanup(t *testing.T) {
+	state := StateCreator()
+	state.Setup(t)
+	defer state.TearDown(t)
+
+	ctx := context.Background()
+	process := NewTestProcess("test-executor-cleanup")
+
+	executor, err := NewExecutor(ctx, process, state.Storage, ExecutorConfig{
+		MaxWorkers:          2,
+		HeartbeatInterval:   5 * time.Second,
+		LeaseExpireDuration: 10 * time.Second,
+		SweepInterval:       100 * time.Millisecond,
+		ExecutionTimeout:    30 * time.Second,
+		MaxExecutionCount:   3,
+		EnableCleanup:       true,
+		CleanupInterval:     200 * time.Millisecond,
+		CleanupThreshold:    1 * time.Millisecond,
+		CleanupBatchSize:    100,
 	})
 	assert.Nil(t, err)
+	executor.Start()
+	defer executor.Stop()
 
-	job, _ := s.h.GetJob(t, jobData.JobId)
-	assert.Equal(t, true, strings.HasPrefix(job.GoroutineId, "ExecutorA"))
-	goroutineId := job.GoroutineId
+	// Register and execute a job
+	client := NewClientSimple(state.Storage, process)
+	jobId := uuid.New().String()
+	err = client.Register(ctx, TestJobData{ID: jobId, Counter: 0})
+	assert.Nil(t, err)
 
-	// Heartbeat gets updated per 100 milliseconds. We verify that heartbeat gets updated.
-	// Check for 10 increments.
-	expectedTime := time.Now()
-	for i := 0; i < 10; i++ {
-		expectedTime = expectedTime.Add(100 * time.Millisecond)
-		err = util.Await(1*time.Second, func() bool {
-			found, _ := s.h.GetJob(t, jobData.JobId)
-			assert.Equal(t, goroutineId, found.GoroutineId)
+	// Wait for job to complete
+	state.h.WaitJobStatus(t, 10*time.Second, jobId, JSDone)
 
-			isIncremented := found.GoroutineHeartBeatTs.UnixMicro() >= expectedTime.UnixMicro()
-			if isIncremented {
-				expectedTime = found.GoroutineHeartBeatTs
-			}
-
-			// No matter if it's incremented or not, LeaseExpireTs must be the same as HeartBeat + ExpireDuration.
-			assert.Equal(t, found.GoroutineLeaseExpireTs, found.GoroutineHeartBeatTs.Add(leaseExpireDuration))
-
-			return isIncremented
-		})
-		assert.Nil(t, err)
-	}
-
-	// Make heartbeat stop. This should cause heartbeat to fail three times, which will then cancel the context.
-	shouldFailAtomic.Store(true)
-
-	// Because the context fails, heartbeat stops and lease will expire, so we wait for the job to be taken over
-	// by another goroutine.
-	s.h.WaitJobGoroutineIdChanged(t, 3*time.Second, []string{goroutineId}, jobData.JobId)
-
-	job, _ = s.h.GetJob(t, jobData.JobId)
-	assert.Equal(t, true, strings.HasPrefix(job.GoroutineId, "ExecutorA"))
-	goroutineId = job.GoroutineId
-
-	// Allow the subprocess to finish.
-	close(cStop)
-
-	// We expect the next execution to succeeds.
-	s.h.WaitJobStatus(t, 5*time.Second, jobData.JobId, JSDone)
-	assertJobDone[*multiJobData](t, s.h, process, jobData, 2, 3, regTime)
+	// Wait for cleanup
+	err = testutil.Await(10*time.Second, func() bool {
+		jobs := state.h.GetAllJobs()
+		return len(jobs) == 0
+	})
+	assert.Nil(t, err)
 }

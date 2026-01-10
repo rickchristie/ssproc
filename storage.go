@@ -22,6 +22,9 @@ type Storage interface {
 	// Returns JobIdAlreadyExist if job with the same ID already exists.
 	RegisterJob(ctx context.Context, job *Job) error
 
+	// RegisterJobTx registers a job within an existing transaction.
+	RegisterJobTx(ctx context.Context, tx QueryExecutor, job *Job) error
+
 	// GetOpenJobCandidates return potentially open jobs (empty Job.GoroutineId, expired leases). Executor will
 	// then pass these job IDs to the worker pool, which will try to TakeOverJob and execute, retry execution,
 	// or compensate.
@@ -90,6 +93,74 @@ type Storage interface {
 	// Job.GoroutineLeaseExpireTs based on the current time.
 	UpdateJob(ctx context.Context, job *Job, leaseExpireDuration time.Duration) error
 
-	// ClearDoneJobs clears jobs that is already done, whose done time is earlier than the given activeThreshold.
-	ClearDoneJobs(ctx context.Context, activeThreshold time.Time) error
+	// ClearDoneJobs delete jobs that is already done, whose done time is earlier than the given processId, activeThreshold,
+	// and will delete up to maxRowsToDelete.
+	// It will return the amount of successful jobs deleted.
+	ClearDoneJobs(ctx context.Context, processId string, activeThreshold time.Time, maxRowsToDelete int) (int64, error)
+
+	// FilterJobs returns jobs matching the filter criteria with pagination support.
+	// Returns array of jobs, total count of matching rows, and error if any.
+	FilterJobs(ctx context.Context, input FilterJob, page int, itemsPerPage int) (
+		jobs []*Job,
+		totalRows int,
+		err error,
+	)
+}
+
+// FilterJob contains filter parameters for querying jobs.
+type FilterJob struct {
+	// JobId filters by exact job ID match.
+	JobId string
+
+	// ProcessId filters by process ID.
+	ProcessId string
+
+	// GoroutineId filters by goroutine ID.
+	GoroutineId string
+
+	// JobStatus filters by job status.
+	JobStatus JobStatus
+
+	// ExecCountGt filters jobs with exec count greater than this value.
+	// Use -1 to filter for exec_count >= 0. Zero value means no filter is applied.
+	ExecCountGt int
+
+	// ExecCountLt filters jobs with exec count less than this value.
+	// Use 1 to filter for exec_count <= 0. Zero value means no filter is applied.
+	ExecCountLt int
+
+	// RunType filters by run type.
+	RunType RunType
+
+	// CreatedTsGte filters jobs created at or after this time.
+	// Zero value (checked with IsZero()) means no filter is applied.
+	CreatedTsGte time.Time
+
+	// CreatedTsLte filters jobs created at or before this time.
+	// Zero value (checked with IsZero()) means no filter is applied.
+	CreatedTsLte time.Time
+
+	// LastUpdateTsGte filters jobs last updated at or after this time.
+	// Zero value (checked with IsZero()) means no filter is applied.
+	LastUpdateTsGte time.Time
+
+	// LastUpdateTsLte filters jobs last updated at or before this time.
+	// Zero value (checked with IsZero()) means no filter is applied.
+	LastUpdateTsLte time.Time
+
+	// StartedTsGte filters jobs started at or after this time.
+	// Zero value (checked with IsZero()) means no filter is applied.
+	StartedTsGte time.Time
+
+	// StartedTsLte filters jobs started at or before this time.
+	// Zero value (checked with IsZero()) means no filter is applied.
+	StartedTsLte time.Time
+
+	// EndTsGte filters jobs ended at or after this time.
+	// Zero value (checked with IsZero()) means no filter is applied.
+	EndTsGte time.Time
+
+	// EndTsLte filters jobs ended at or before this time.
+	// Zero value (checked with IsZero()) means no filter is applied.
+	EndTsLte time.Time
 }

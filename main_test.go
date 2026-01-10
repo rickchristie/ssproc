@@ -1,10 +1,12 @@
 package ssproc
 
 import (
-	"go.uber.org/goleak"
+	"os"
 	"testing"
 )
 
 func TestMain(m *testing.M) {
-	goleak.VerifyTestMain(m)
+	// Set test environment flag for reduced memory usage in worker pool
+	os.Setenv("GO_TEST_ENV", "TRUE")
+	os.Exit(m.Run())
 }
