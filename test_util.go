@@ -92,6 +92,29 @@ func (h *PgTestHelper) CountNotDoneJobs(t *testing.T, processId string) int {
 	return count
 }
 
+// CountJobsByStatus counts jobs with a specific status.
+func (h *PgTestHelper) CountJobsByStatus(t *testing.T, processId string, status JobStatus) int64 {
+	tx, ctx, cancel, err := h.PgStorage.beginTx(h.Ctx)
+	assert.Nil(t, err)
+	defer h.PgStorage.rollback(ctx, cancel, tx)
+
+	query := fmt.Sprintf(`SELECT
+			COUNT(*)
+		FROM
+			%v.%v
+		WHERE
+			process_id = $1 AND status = $2`,
+		h.PgStorage.schema, h.PgStorage.table,
+	)
+	row := tx.QueryRow(h.Ctx, query, processId, status)
+
+	var count int64
+	err = row.Scan(&count)
+	assert.Nil(t, err)
+
+	return count
+}
+
 // SetLeaseExpireTime sets the lease expire time for a job.
 func (h *PgTestHelper) SetLeaseExpireTime(t *testing.T, jobId string, leaseExpireTs time.Time) {
 	tx, ctx, cancel, err := h.PgStorage.beginTx(h.Ctx)

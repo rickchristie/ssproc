@@ -16,14 +16,6 @@ echo 'User creation done!'
 # Create test_template database with extensions
 PGPASSWORD=LegacyCodeIsOneWithNoTest psql -U tester -c "CREATE DATABASE test_template WITH ENCODING 'UTF8' LC_COLLATE='en_US.UTF-8' LC_CTYPE='en_US.UTF-8' TEMPLATE=template0;"
 
-PGPASSWORD=LegacyCodeIsOneWithNoTest psql -U tester -d test_template -c 'CREATE EXTENSION IF NOT EXISTS postgis CASCADE;'
-
-PGPASSWORD=LegacyCodeIsOneWithNoTest psql -U tester -d test_template -c 'CREATE EXTENSION IF NOT EXISTS earthdistance CASCADE;'
-
-PGPASSWORD=LegacyCodeIsOneWithNoTest psql -U tester -d test_template -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm CASCADE;'
-
-PGPASSWORD=LegacyCodeIsOneWithNoTest psql -U tester -d test_template -c 'CREATE EXTENSION IF NOT EXISTS btree_gist CASCADE;'
-
 PGPASSWORD=LegacyCodeIsOneWithNoTest psql -U tester -d test_template -c 'VACUUM FREEZE;'
 PGPASSWORD=LegacyCodeIsOneWithNoTest psql -U tester -d test_template -c "UPDATE pg_database SET datistemplate = TRUE WHERE datname = 'test_template';"
 

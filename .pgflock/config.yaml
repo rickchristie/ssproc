@@ -3,19 +3,15 @@ instance_count: 1
 starting_port: 5050
 databases_per_instance: 8
 tmpfs_size: 1024m
-shm_size: 1g
+shm_size: 2g
 locker_port: 5151
 auto_unlock_minutes: 30
 pg_username: tester
 password: LegacyCodeIsOneWithNoTest
 database_prefix: tester
-extensions:
-    - postgis
-    - earthdistance
-    - pg_trgm
-    - btree_gist
+extensions: []
 postgres_version: "15"
 encoding: UTF8
 lc_collate: en_US.UTF-8
 lc_ctype: en_US.UTF-8
-max_connections: 5000
+max_connections: 10000

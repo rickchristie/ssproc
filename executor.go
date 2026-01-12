@@ -132,6 +132,12 @@ func NewExecutor[Data JobData](
 	if config.ExecutionTimeout == 0 {
 		config.ExecutionTimeout = 5 * time.Minute
 	}
+	if config.ExecutionTimeout < config.LeaseExpireDuration+5*time.Second {
+		return nil, interr.Err(fmt.Sprintf(
+			"ExecutionTimeout (%v) must be at least 5 seconds greater than LeaseExpireDuration (%v) to prevent multiple executors from processing the same job simultaneously",
+			config.ExecutionTimeout, config.LeaseExpireDuration,
+		), true)
+	}
 	if config.MaxExecutionCount == 0 {
 		config.MaxExecutionCount = 5
 	}

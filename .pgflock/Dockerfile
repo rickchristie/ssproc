@@ -10,15 +10,6 @@ COPY ./postgresql.conf /etc/postgresql/postgresql.conf
 ENV POSTGRES_CONFIG_FILE=/etc/postgresql/postgresql.conf
 
 
-# Install PostGIS
-ENV POSTGIS_MAJOR=3
-RUN apt-get update \
-      && apt-cache showpkg postgresql-$PG_MAJOR-postgis-$POSTGIS_MAJOR \
-      && apt-get install -y --no-install-recommends \
-           postgresql-$PG_MAJOR-postgis-$POSTGIS_MAJOR \
-           postgresql-$PG_MAJOR-postgis-$POSTGIS_MAJOR-scripts \
-      && rm -rf /var/lib/apt/lists/*
-
 
 # Copy initialization script
 COPY ./init.sh /docker-entrypoint-initdb.d/
